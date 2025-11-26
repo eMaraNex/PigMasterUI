@@ -142,7 +142,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
           {
             sow_id: sowId,
             boar_id: selectedBoarOption?.boar_id || null,
-            mating_date: new Date(new Date(actualBirthDate).getTime() - 30 * 24 * 60 * 60 * 1000)
+            mating_date: new Date(new Date(actualBirthDate).getTime() - 114 * 24 * 60 * 60 * 1000)
               .toISOString()
               .split("T")[0],
             expected_birth_date: actualBirthDate,

@@ -203,7 +203,7 @@ const DashboardContent: React.FC = () => {
           r.is_pregnant && r.pregnancy_start_date
             ? new Date(
               new Date(r.pregnancy_start_date).getTime() +
-              (utils.PREGNANCY_DURATION_DAYS || 31) * 24 * 60 * 60 * 1000
+              (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000
             ).toISOString()
             : r.expected_birth_date,
       }));

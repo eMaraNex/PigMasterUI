@@ -93,7 +93,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutch
       if (!sow || !boar) throw new Error("Invalid pig selection");
 
       const matingDate = new Date().toISOString().split("T")[0];
-      const expectedBirthDate = new Date(new Date(matingDate).getTime() + (utils.PREGNANCY_DURATION_DAYS || 31) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const expectedBirthDate = new Date(new Date(matingDate).getTime() + (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       // Update pig state locally
       const updatedPigs = pigs.map((r) =>
         r.id === selectedSow

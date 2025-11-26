@@ -70,7 +70,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
       const matingDate = new Date(formData.mating_date);
       if (!isNaN(matingDate.getTime())) {
         const pregnancyStartDate = matingDate.toISOString().split("T")[0];
-        const expectedBirthDate = new Date(matingDate.getTime() + (utils.PREGNANCY_DURATION_DAYS || 31) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const expectedBirthDate = new Date(matingDate.getTime() + (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         setFormData((prev) => ({
           ...prev,
           pregnancy_start_date: pregnancyStartDate,
@@ -127,7 +127,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
       }
       if (isPregnantAndServed) {
         const matingDate = new Date(formData.mating_date).toISOString().split('T')[0];
-        const expectedBirthDate = new Date(new Date(matingDate).getTime() + (utils.PREGNANCY_DURATION_DAYS || 31) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const expectedBirthDate = new Date(new Date(matingDate).getTime() + (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         await axios.post(`${utils.apiUrl}/breeds/${user.farm_id}`,
           {
             farm_id: user.farm_id,

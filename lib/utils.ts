@@ -138,9 +138,9 @@ export const getAddressFromCoordinates = async (latitude: number, longitude: num
 
 // Breeding and age-related constants
 export const MIN_BREEDING_AGE_MONTHS = 4; // Minimum age for breeding in months
-export const PREGNANCY_DURATION_DAYS = 31; // Average pig pregnancy duration
-export const NESTING_BOX_START_DAYS = 26; // When to add nesting box (days after mating)
-export const NESTING_BOX_END_DAYS = 30; // End of nesting box addition period
+export const PREGNANCY_DURATION_DAYS = 114; // Pig pregnancy duration: 3 months, 3 weeks, 3 days
+export const NESTING_BOX_START_DAYS = 110; // When to add nesting box (days after mating, ~4 days before expected birth)
+export const NESTING_BOX_END_DAYS = 112; // End of nesting box addition period (~2 days before expected birth)
 export const WEANING_PERIOD_DAYS = 42; // Weaning period after birth
 export const POST_WEANING_BREEDING_DELAY_DAYS = 7; // Days after weaning before sow can breed again
 export const BIRTH_EXPECTED_WINDOW_DAYS = { before: 7, after: 2 }; // Birth expected alert window (7 days before, 2 days after)
@@ -200,7 +200,7 @@ export const generateAlerts = (
       const timeDiff = currentDate.getTime() - pregnancyStart.getTime();
       const daysSincePregnancy = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
 
-      if (daysSincePregnancy >= 0 && daysSincePregnancy < (NESTING_BOX_START_DAYS || 25)) {
+      if (daysSincePregnancy >= 0 && daysSincePregnancy < (NESTING_BOX_START_DAYS || 110)) {
         alertsList.push({
           type: "Pregnancy Noticed",
           message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Confirmed pregnant since ${pregnancyStart.toLocaleDateString()}`,
@@ -209,8 +209,8 @@ export const generateAlerts = (
       }
 
       // --- Nesting Box Needed Alert ---
-      // Reminds to add a nesting box when pregnancy reaches days 25-28
-      if (daysSincePregnancy >= (NESTING_BOX_START_DAYS || 25) && daysSincePregnancy < (NESTING_BOX_END_DAYS || 28)) {
+      // Reminds to add a nesting box when pregnancy reaches days 110-112
+      if (daysSincePregnancy >= (NESTING_BOX_START_DAYS || 110) && daysSincePregnancy < (NESTING_BOX_END_DAYS || 112)) {
         alertsList.push({
           type: "Nesting Box Needed",
           message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Add nesting box, ${daysSincePregnancy} days since mating`,
@@ -219,7 +219,7 @@ export const generateAlerts = (
       }
 
       // --- Birth Expected Alert ---
-      // Alerts when birth is expected (days 28-31) or overdue
+      // Alerts when birth is expected (days 110-114) or overdue
       if (pig.expected_birth_date && !pig.actual_birth_date) {
         let expectedDate;
         try {
@@ -227,10 +227,10 @@ export const generateAlerts = (
           if (isNaN(expectedDate.getTime())) throw new Error("Invalid expected_birth_date");
         } catch (e) {
           console.error(`Invalid expected_birth_date for ${pig.name}:`, pig.expected_birth_date);
-          expectedDate = new Date(currentDate.getTime() + (PREGNANCY_DURATION_DAYS || 30) * 24 * 60 * 60 * 1000);
+          expectedDate = new Date(currentDate.getTime() + (PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000);
         }
         const daysToBirth = Math.ceil((expectedDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysSincePregnancy >= 28 && daysSincePregnancy <= 31) {
+        if (daysSincePregnancy >= 110 && daysSincePregnancy <= 114) {
           alertsList.push({
             type: "Birth Expected",
             message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Expected to give birth ${daysToBirth === 0 ? "today" : daysToBirth > 0 ? `in ${daysToBirth} days` : `overdue by ${Math.abs(daysToBirth)} days`}`,
@@ -292,7 +292,7 @@ export const generateAlerts = (
       if (
         (!pig.pregnancy_start_date ||
           (pig.pregnancy_start_date &&
-            currentDate.getTime() > new Date(pig.pregnancy_start_date).getTime() + ((PREGNANCY_DURATION_DAYS || 30) + (WEANING_PERIOD_DAYS || 42)) * 24 * 60 * 60 * 1000)) &&
+            currentDate.getTime() > new Date(pig.pregnancy_start_date).getTime() + ((PREGNANCY_DURATION_DAYS || 114) + (WEANING_PERIOD_DAYS || 42)) * 24 * 60 * 60 * 1000)) &&
         (!oneWeekAfterWeaning || currentDate > oneWeekAfterWeaning)
       ) {
         alertsList.push({
