@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sungura-master-v3';
+const CACHE_NAME = 'pig-master-v3';
 const OFFLINE_URL = '/offline.html';
 
 const urlsToCache = [
@@ -93,7 +93,7 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         (async () => {
             try {
-                console.log('Installing Sungura Master...');
+                console.log('Installing Pig Master...');
 
                 const cache = await caches.open(CACHE_NAME);
 
@@ -119,7 +119,7 @@ self.addEventListener('install', (event) => {
                     }
                 }
 
-                console.log('Sungura Master installed successfully!');
+                console.log('Pig Master installed successfully!');
                 await self.skipWaiting();
 
             } catch (error) {
@@ -136,7 +136,7 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(
         (async () => {
             try {
-                console.log('Activating Sungura Master...');
+                console.log('Activating Pig Master...');
 
                 // Clean up old caches
                 await cleanupOldCaches();
@@ -144,7 +144,7 @@ self.addEventListener('activate', (event) => {
                 // Take control of all clients
                 await self.clients.claim();
 
-                console.log('Sungura Master activated successfully!');
+                console.log('Pig Master activated successfully!');
 
             } catch (error) {
                 console.error('Activation failed:', error);
@@ -191,7 +191,7 @@ self.addEventListener('fetch', (event) => {
                         `<!DOCTYPE html>
                         <html>
                         <head>
-                            <title>Sungura Master - Offline</title>
+                            <title>Pig Master - Offline</title>
                             <meta name="viewport" content="width=device-width, initial-scale=1">
                             <style>
                                 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -202,7 +202,7 @@ self.addEventListener('fetch', (event) => {
                             </style>
                         </head>
                         <body>
-                            <div class="logo">🐰 Sungura Master</div>
+                            <div class="logo">🐰 Pig Master</div>
                             <div class="message">You're currently offline</div>
                             <div class="hint">Please check your internet connection and try again.</div>
                         </body>
@@ -255,7 +255,7 @@ self.addEventListener('push', (event) => {
         const data = event.data.json();
 
         const options = {
-            body: data.body || 'New update from Sungura Master',
+            body: data.body || 'New update from Pig Master',
             icon: '/icons/icon-192x192.png',
             badge: '/icons/icon-72x72.png',
             vibrate: [200, 100, 200],
@@ -278,7 +278,7 @@ self.addEventListener('push', (event) => {
         };
 
         event.waitUntil(
-            self.registration.showNotification('Sungura Master', options)
+            self.registration.showNotification('Pig Master', options)
         );
     }
 });

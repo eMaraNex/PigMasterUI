@@ -15,7 +15,7 @@ export default function YouTubePage() {
         },
         {
             id: "xcA1KRyjZYs",
-            title: "Install Sungura Master on your Mobile device",
+            title: "Install Pig Master on your Mobile device",
 
         },
     ]

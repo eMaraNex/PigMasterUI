@@ -12,12 +12,12 @@ import Script from 'next/script';
 import { ReduxProvider } from '@/components/providers/redux-provider';
 
 export const metadata: Metadata = {
-  title: 'Sungura Master',
+  title: 'Pig Master',
   description: 'Professional software to help manage farming operations efficiently with comprehensive tools and analytics.',
   keywords: ['pig farming', 'swine farming', 'pig farming in Kenya', 'farm management', 'agriculture', 'livestock', 'farming software', 'productivity'],
-  authors: [{ name: 'Sungura Master Team' }],
-  creator: 'Sungura Master',
-  publisher: 'Sungura Master',
+  authors: [{ name: 'Pig Master Team' }],
+  creator: 'Pig Master',
+  publisher: 'Pig Master',
   formatDetection: {
     email: false,
     address: false,
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Sungura Master',
+    title: 'Pig Master',
     startupImage: [
       {
         url: '/icons/apple-splash-2048-2732.png',
@@ -88,8 +88,8 @@ export const metadata: Metadata = {
     'mobile-web-app-capable': 'yes',
     'apple-mobile-web-app-capable': 'yes',
     'apple-mobile-web-app-status-bar-style': 'default',
-    'apple-mobile-web-app-title': 'Sungura Master',
-    'application-name': 'Sungura Master',
+    'apple-mobile-web-app-title': 'Pig Master',
+    'application-name': 'Pig Master',
     'msapplication-TileColor': '#22c55e',
     'msapplication-TileImage': '/icons/ms-icon-144x144.png',
     'msapplication-config': '/browserconfig.xml',
@@ -115,7 +115,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <link rel="preload" href="/icons/icon-192x192.png" as="image" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Sungura Master" />
+        <meta name="apple-mobile-web-app-title" content="Pig Master" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-TileColor" content="#22c55e" />
@@ -150,9 +150,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
                     const registration = await navigator.serviceWorker.register('/sw.js', {
                       scope: '/'
                     });
-                    console.log('🐰 Sungura Master SW registered successfully:', registration);
+                    console.log('🐰 Pig Master SW registered successfully:', registration);
                     registration.addEventListener('updatefound', () => {
-                      console.log('🔄 New version of Sungura Master available');
+                      console.log('🔄 New version of Pig Master available');
                     });
                     setInterval(() => {
                       registration.update();
@@ -166,7 +166,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
                 window.deferredPrompt = e;
               });
               window.addEventListener('appinstalled', (e) => {
-                console.log('✅ Sungura Master installed successfully');
+                console.log('✅ Pig Master installed successfully');
                 window.deferredPrompt = null;
               });
             `,

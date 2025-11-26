@@ -85,7 +85,7 @@ export default function PWAInstaller() {
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            Install Sungura Master
+                            Install Pig Master
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                             Add to your home screen for quick access
