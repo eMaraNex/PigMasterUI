@@ -121,22 +121,71 @@ export default function EarningsTracker() {
     }
   }, [user?.farm_id]);
 
+  // When the date filter or custom date range changes we request server-side filtered data
   useEffect(() => {
-    filterEarnings();
-  }, [earnings, dateFilter, customDateRange]);
+    // If user isn't loaded, bail
+    if (!user?.farm_id) return;
 
-  const loadEarnings = async () => {
+    // If the filter is 'all' just fetch everything from server
+    if (dateFilter === 'all') {
+      loadEarnings();
+      return;
+    }
+
+    // For other filters compute date_from/date_to and call loadEarnings
+    const now = new Date();
+    let date_from: string | undefined;
+    let date_to: string | undefined;
+
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+    switch (dateFilter) {
+      case 'today':
+        date_from = fmt(now);
+        date_to = fmt(now);
+        break;
+      case 'week':
+        date_from = fmt(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+        date_to = fmt(now);
+        break;
+      case 'month':
+        date_from = fmt(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
+        date_to = fmt(now);
+        break;
+      case 'year':
+        date_from = fmt(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+        date_to = fmt(now);
+        break;
+      case 'custom':
+        if (customDateRange.start && customDateRange.end) {
+          date_from = customDateRange.start;
+          date_to = customDateRange.end;
+        }
+        break;
+    }
+
+    loadEarnings({ date_from, date_to });
+  }, [dateFilter, customDateRange, user?.farm_id]);
+
+  const loadEarnings = async (filters = {}) => {
     try {
       const token = localStorage.getItem("pig_farm_token");
       if (!token) {
         showError('Error', "No authentication token found")
       }
 
-      const response = await axios.get(`${utils.apiUrl}/earnings/${user?.farm_id}`, {
+      const params = new URLSearchParams();
+      if (filters?.date_from) params.append('date_from', filters.date_from);
+      if (filters?.date_to) params.append('date_to', filters.date_to);
+      // optional: accept filters.type etc in the future
+
+      const url = `${utils.apiUrl}/earnings/${user?.farm_id}${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       setEarnings(response.data.data || []);
+      setFilteredEarnings(response.data.data || []);
     } catch (error) {
       showError('Error', error?.toString())
       setEarnings([]);
