@@ -30,7 +30,7 @@ const Header: React.FC<HeaderProps> = ({
     farmName,
 }) => {
     const router = useRouter();
-    const { tier } = useSubscription();
+    const { tier, isTrialActive, trialDaysLeft } = useSubscription();
 
     const handleMenuClick = (action: string) => {
         switch (action) {
@@ -87,6 +87,14 @@ const Header: React.FC<HeaderProps> = ({
                     <div className="flex items-center space-x-2 sm:space-x-3">
                         {/* Desktop Actions */}
                         <div className="hidden md:flex items-center space-x-2 sm:space-x-3">
+                       {isTrialActive && (
+                            <Badge
+                                variant="default"
+                                className="shadow-sm px-3 py-2 min-w-[140px] justify-center rounded-lg text-xs sm:text-sm bg-gradient-to-r from-amber-400 to-orange-500 text-white"
+                            >
+                                Trial • {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left
+                            </Badge>
+                        )}
                        <Badge
                             variant={tier === "free" ? "secondary" : tier === "standard" ? "default" : "destructive"}
                             className="shadow-sm px-3 py-2 min-w-[120px] justify-center rounded-lg text-xs sm:text-sm"

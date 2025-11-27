@@ -46,7 +46,7 @@ import UpgradePrompt from "@/components/shared/upgradeprompt";
 const DashboardContent: React.FC = () => {
   const { user, logout } = useAuth();
   const { showError } = useToast();
-  const { isFeatureAvailable } = useSubscription();
+  const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier } = useSubscription();
   const [selectedPig, setSelectedPig] = useState<PigType | null>(null);
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [pigs, setPigs] = useState<PigType[]>([]);
@@ -376,6 +376,32 @@ const DashboardContent: React.FC = () => {
 
       <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {user && !user.email_verified && <EmailVerificationBanner />}
+        {isTrialActive && (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
+            <p className="font-medium">
+              You&apos;re on a full-access trial. {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left to explore every feature.
+            </p>
+          </div>
+        )}
+        {!isTrialActive && tier === "free" && (
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 text-sm text-rose-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-rose-500" />
+              <div>
+                <p className="font-semibold">Your trial has ended.</p>
+                <p className="text-xs text-rose-800">
+                  Upgrade to keep using breeding, analytics, and other premium tools.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push("/pricing")}
+              className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs sm:text-sm"
+            >
+              View Plans
+            </Button>
+          </div>
+        )}
         {hasFarm ? (
           <>
           {hasFarm && !hasRow && <RowBanner onRowAdded={handleRowCreated} />}

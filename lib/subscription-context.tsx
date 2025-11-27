@@ -4,6 +4,7 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react";
 import { roles } from "./constants";
 import { useAuth } from "./auth-context"; 
+import { getFarmTrialInfo, type TrialInfo } from "./utils";
 
 type SubscriptionTier = "free" | "standard" | "advanced" | "admin" | "superadmin"
 
@@ -21,6 +22,9 @@ interface SubscriptionContextType {
     canAddMore: (type: string, current: number) => boolean
     upgradeTo: (newTier: SubscriptionTier) => void
     getNextTier: () => SubscriptionTier | null
+    isTrialActive: boolean
+    trialEndsAt: string | null
+    trialDaysLeft: number
 }
 
 const subscriptionLimits: Record<SubscriptionTier, SubscriptionLimits> = {
@@ -94,6 +98,11 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth(); 
     const [tier, setTier] = useState<SubscriptionTier>("free");
+    const [trialInfo, setTrialInfo] = useState<TrialInfo>({
+        isTrialActive: false,
+        trialEndsAt: null,
+        trialDaysLeft: 0,
+    });
 
     useEffect(() => {
         const roleId = user?.role_id ? parseInt(user.role_id, 10) : undefined;
@@ -105,11 +114,28 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         }
     }, [user]);
 
+    useEffect(() => {
+        const updateTrialInfo = () => {
+            const info = getFarmTrialInfo();
+            setTrialInfo(info);
+        };
+
+        updateTrialInfo();
+        const interval = window.setInterval(updateTrialInfo, 60 * 60 * 1000); // refresh hourly
+        return () => window.clearInterval(interval);
+    }, [user]);
+
     const isFeatureAvailable = (feature: string): boolean => {
+        if (trialInfo.isTrialActive) {
+            return true;
+        }
         return featureMatrix[tier].includes(feature)
     }
 
     const canAddMore = (type: string, current: number): boolean => {
+        if (trialInfo.isTrialActive) {
+            return true;
+        }
         const key = `max${type.charAt(0).toUpperCase() + type.slice(1)}` as keyof SubscriptionLimits;
         const limit = limits[key];
         return limit === -1 || current < limit
@@ -127,7 +153,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         return null;
     }
 
-    const limits = subscriptionLimits[tier]
+    const limits = trialInfo.isTrialActive ? subscriptionLimits.advanced : subscriptionLimits[tier]
 
     return (
         <SubscriptionContext.Provider
@@ -137,7 +163,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 isFeatureAvailable,
                 canAddMore,
                 upgradeTo,
-                getNextTier
+                getNextTier,
+                isTrialActive: trialInfo.isTrialActive,
+                trialEndsAt: trialInfo.trialEndsAt,
+                trialDaysLeft: trialInfo.trialDaysLeft
             }}
         >
             {children}

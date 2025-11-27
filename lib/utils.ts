@@ -78,6 +78,63 @@ const normalizeUrl = (url: any) => url.replace(/\/$/, '');
 export const baseUrl = process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:5000";
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const parseTrialPeriod = () => {
+  const parsed = Number.parseInt(process.env.NEXT_PUBLIC_TRIAL_PERIOD ?? process.env.TRIAL_PERIOD ?? "30", 10);
+  return Number.isNaN(parsed) ? 30 : Math.max(parsed, 1);
+};
+
+export interface TrialInfo {
+  isTrialActive: boolean;
+  trialEndsAt: string | null;
+  trialDaysLeft: number;
+}
+
+export const TRIAL_PERIOD_DAYS = parseTrialPeriod();
+
+const defaultTrialInfo: TrialInfo = {
+  isTrialActive: false,
+  trialEndsAt: null,
+  trialDaysLeft: 0,
+};
+
+export const getFarmTrialInfo = (): TrialInfo => {
+  if (typeof window === "undefined") {
+    return defaultTrialInfo;
+  }
+
+  try {
+    const farmDataRaw = localStorage.getItem("pig_farm_data");
+    if (!farmDataRaw) {
+      return defaultTrialInfo;
+    }
+    const farmData = JSON.parse(farmDataRaw);
+    const createdAt = farmData?.created_at ?? farmData?.createdAt;
+    if (!createdAt) {
+      return defaultTrialInfo;
+    }
+    const createdDate = new Date(createdAt);
+    if (Number.isNaN(createdDate.getTime())) {
+      return defaultTrialInfo;
+    }
+    const trialEndDate = new Date(createdDate.getTime() + TRIAL_PERIOD_DAYS * DAY_IN_MS);
+    const now = new Date();
+    const isTrialActive = now.getTime() <= trialEndDate.getTime();
+    const trialDaysLeft = isTrialActive
+      ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / DAY_IN_MS))
+      : 0;
+
+    return {
+      isTrialActive,
+      trialEndsAt: trialEndDate.toISOString(),
+      trialDaysLeft,
+    };
+  } catch (error) {
+    console.error("Failed to parse farm trial info:", error);
+    return defaultTrialInfo;
+  }
+};
+
 export function formatPigCount(sows: number, boars: number): string {
   const sowText = sows === 1 ? "1 sow" : sows > 1 ? `${sows} sows` : "";
   const boarText = boars === 1 ? "1 boar" : boars > 1 ? `${boars} boars` : "";
