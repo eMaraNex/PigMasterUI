@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { FeedingScheduleProps, Pig } from "@/types"
 import { hutchNamesConversion } from "@/lib/utils"
 
@@ -20,6 +20,11 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
   const { user } = useAuth()
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
+  const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
+
+  useEffect(() => {
+    setLocalPigs(pigs || [])
+  }, [pigs])
   const [form, setForm] = useState({
     pig_id: pigs?.[0]?.pig_id || '',
     feed_type: 'pellets',
@@ -39,7 +44,7 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
     return "fed"
   }
 
-  const safePigs = pigs || []
+  const safePigs = localPigs || []
   const overduePigs = safePigs.filter((r) => getCurrentFeedingStatus(r) === "overdue")
   const duePigs = safePigs.filter((r) => getCurrentFeedingStatus(r) === "due")
   const fedPigs = safePigs.filter((r) => getCurrentFeedingStatus(r) === "fed")
@@ -179,14 +184,28 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                 <DialogHeader>
                   <DialogTitle>Record feeding</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={async(e)=>{e.preventDefault(); if(!user?.farm_id){ showError('Error','Missing farm info'); return } try{ await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, form, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); showSuccess('Success','Feeding recorded'); setAddOpen(false); window.location.reload(); }catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }}>
+                <form onSubmit={async(e)=>{
+                    e.preventDefault();
+                    if(!user?.farm_id){ showError('Error','Missing farm info'); return }
+                    try{
+                      const payload = { ...form, farm_id: user.farm_id }
+                      const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                      const added = resp?.data?.data ?? resp?.data
+                      // update local pigs feeding schedule (lastFed)
+                      if (added?.pig_id && added?.feeding_time) {
+                        setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
+                      }
+                      showSuccess('Success','Feeding recorded')
+                      setAddOpen(false)
+                    }catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) }
+                  }}>
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs font-medium">Pig</label>
                       <Select value={form.pig_id} onValueChange={(v)=>setForm({...form,pig_id:v})}>
                         <SelectTrigger className="w-full"><SelectValue/></SelectTrigger>
                         <SelectContent>
-                          {pigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
+                          {localPigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -294,9 +313,13 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                           const amount = pig?.feedingSchedule?.dailyAmount || '0'
                           const feedType = pig?.feedingSchedule?.feedType || 'pellets'
                           const payload = { pig_id: pig.pig_id, farm_id: user.farm_id, feed_type: feedType, amount: amount, unit: 'grams', feeding_time: new Date().toISOString() }
-                          await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                          showSuccess('Success','Feeding recorded')
-                          window.location.reload()
+                          const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                            const added = resp?.data?.data ?? resp?.data
+                            // update local pig state with lastFed so UI updates without full page reload
+                            if (added?.pig_id && added?.feeding_time) {
+                              setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
+                            }
+                            showSuccess('Success','Feeding recorded')
                         }catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) }
                       }}
                     >

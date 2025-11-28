@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Pill, AlertTriangle, Calendar, Plus } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import axios from "axios"
 import { useAuth } from "@/lib/auth-context"
 import * as utils from "@/lib/utils"
@@ -20,6 +20,11 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
   const { user } = useAuth()
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
+  const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
+
+  useEffect(() => {
+    setLocalPigs(pigs || [])
+  }, [pigs])
   const [form, setForm] = useState({
     pig_id: pigs?.[0]?.pig_id || "",
     type: 'checkup',
@@ -56,9 +61,9 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
     return "good"
   }
 
-  const overduePigs = pigs?.filter((r) => getHealthStatus(r) === "overdue") || []
-  const upcomingPigs = pigs?.filter((r) => getHealthStatus(r) === "upcoming") || []
-  const healthyPigs = pigs?.filter((r) => getHealthStatus(r) === "good") || []
+  const overduePigs = localPigs?.filter((r) => getHealthStatus(r) === "overdue") || []
+  const upcomingPigs = localPigs?.filter((r) => getHealthStatus(r) === "upcoming") || []
+  const healthyPigs = localPigs?.filter((r) => getHealthStatus(r) === "good") || []
 
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
@@ -151,11 +156,22 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                           try{
                             if (!user?.farm_id) { showError('Error','Missing farm details'); return }
                             const overdue = healthRecords.filter((record)=> record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
+                            const updatedRecords = [] as any[]
                             for (const r of overdue) {
-                              await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                              const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                              const updated = resp?.data?.data ?? resp?.data
+                              updatedRecords.push(updated)
                             }
+                            // update local state for this pig
+                            setLocalPigs(prev => prev.map(p => {
+                              if (p.pig_id !== pig.pig_id) return p
+                              const newRecords = (p.healthRecords || []).map(rec => {
+                                const u = updatedRecords.find(x => x.id === rec.id)
+                                return u ? u : rec
+                              })
+                              return { ...p, healthRecords: newRecords }
+                            }))
                             showSuccess('Success','Marked overdue record(s) as completed')
-                            window.location.reload()
                           }catch(err:any){
                             showError('Error', err?.response?.data?.message || err?.message)
                           }
@@ -214,8 +230,8 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                                   Due {new Date(record.nextDue!).toLocaleDateString()}
                                   </span>
                                 <div className="ml-2 flex items-center space-x-2">
-                                  <button onClick={async()=>{ try{ await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); showSuccess('Success','Record marked completed'); window.location.reload(); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
-                                  <button onClick={async()=>{ try{ await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); showSuccess('Success','Record deleted'); window.location.reload(); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
+                                  <button onClick={async()=>{ try{ const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords||[]).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success','Record marked completed'); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
+                                  <button onClick={async()=>{ try{ const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords||[]).filter(r => r.id !== deleted.id) }))); showSuccess('Success','Record deleted'); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
                                 </div>
                               </div>
                             ))}
@@ -258,11 +274,12 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                   e.preventDefault();
                   if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
                   try {
-                    await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                    const resp = await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                    const added = resp?.data?.data ?? resp?.data
+                    // add record into localPigs
+                    setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, healthRecords: [added, ...(p.healthRecords || [])] } : p))
                     showSuccess('Success','Health record added')
                     setAddOpen(false)
-                    // reload page to fetch updated data (parent page fetches pigs)
-                    window.location.reload()
                   } catch(err:any){
                     showError('Error', err?.response?.data?.message || err?.message)
                   }
@@ -275,7 +292,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {pigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
+                          {localPigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -328,7 +345,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
           <div className="space-y-3 sm:space-y-4">
-            {pigs?.map((pig) => {
+            {localPigs?.map((pig) => {
               const status = getHealthStatus(pig)
               const healthRecords = pig?.healthRecords || []
               return (

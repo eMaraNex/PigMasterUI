@@ -311,7 +311,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
             <p className="text-red-700 dark:text-red-300">{error}</p>
           </div>
           <Button
-            onClick={() => window.location.reload()}
+            onClick={() => refetchPigs()}
             variant="outline"
             className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-300"
           >
