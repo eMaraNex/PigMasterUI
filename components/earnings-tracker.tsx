@@ -30,7 +30,7 @@ export default function EarningsTracker() {
   const { showSuccess, showError, showWarn } = useToast();
 
   const [earningsForm, setEarningsForm] = useState<{
-    type: "pig_sale" | "urine_sale" | "manure_sale" | "other";
+    type: "pig_sale" |"manure_sale" | "other";
     pig_id?: string;
     hutch_id?: string;
     amount: string;
@@ -85,7 +85,6 @@ export default function EarningsTracker() {
           { value: "skin_only", label: "Skin Only" },
           { value: "meat_and_skin", label: "Meat and Skin" },
         ];
-      case "urine_sale":
       case "manure_sale":
         return [
           { value: "bulk", label: "Bulk Sale" },
@@ -106,7 +105,6 @@ export default function EarningsTracker() {
     switch (earningType) {
       case "pig_sale":
         return "whole";
-      case "urine_sale":
       case "manure_sale":
         return "bulk";
       default:
@@ -409,7 +407,7 @@ export default function EarningsTracker() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
+        {/* <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
           <CardHeader className="pb-2 sm:pb-4">
             <CardTitle className="text-base sm:text-lg text-gray-900 dark:text-gray-100">Urine Sales</CardTitle>
           </CardHeader>
@@ -421,7 +419,7 @@ export default function EarningsTracker() {
               {production.filter((p) => p.type === "urine").reduce((sum, p) => sum + p.quantity, 0)} liters produced
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
 
         <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1">
           <CardHeader className="pb-2 sm:pb-4">
@@ -674,7 +672,7 @@ export default function EarningsTracker() {
                       <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">Type</Label>
                       <Select
                         value={earningsForm.type}
-                        onValueChange={(value: "pig_sale" | "urine_sale" | "manure_sale" | "other") =>
+                        onValueChange={(value: "pig_sale" | "manure_sale" | "other") =>
                           setEarningsForm({
                             ...earningsForm,
                             type: value,
@@ -695,7 +693,6 @@ export default function EarningsTracker() {
                         </SelectTrigger>
                         <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
                           <SelectItem value="pig_sale">Pig Sale</SelectItem>
-                          <SelectItem value="urine_sale">Urine Sale</SelectItem>
                           <SelectItem value="manure_sale">Manure Sale</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
@@ -817,7 +814,7 @@ export default function EarningsTracker() {
                       </div>
                     )}
 
-                    {(earningsForm.type === "urine_sale" || earningsForm.type === "manure_sale") && (
+                    {( earningsForm.type === "manure_sale") && (
                       <div>
                         <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">Buyer Name</Label>
                         <Input
