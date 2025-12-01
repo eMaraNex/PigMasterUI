@@ -6,6 +6,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  output: 'standalone', // Add this for better Vercel compatibility
   images: {
     unoptimized: false,
     remotePatterns: [
@@ -16,7 +17,7 @@ const nextConfig = {
       },
     ],
   },
-    crossOrigin: 'anonymous',
+  // Remove crossOrigin as it's not a valid Next.js config option
 };
 
 export default nextConfig;
