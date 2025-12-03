@@ -13,7 +13,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Circle, Building, Menu, Plus, User, Settings, CreditCard, LogOut, ChevronDown, Users, Youtube } from "lucide-react";
+import { PiggyBank, Building, Menu, Plus, User, Settings, CreditCard, LogOut, ChevronDown, Users, Youtube } from "lucide-react";
 import CurrencySelector from "@/components/currency-selector";
 import ThemeToggle from "@/components/theme-toggle";
 import { useSubscription } from "@/lib/subscription-context";
@@ -71,7 +71,7 @@ const Header: React.FC<HeaderProps> = ({
                         onClick={handleClick}
                     >
                         <div className="p-2 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl">
-                            <Circle className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                            <PiggyBank className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
                             <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent truncate">

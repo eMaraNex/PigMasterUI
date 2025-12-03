@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../../../components/ui/dialog";
-import { Circle, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import {Mail, Lock, Eye, EyeOff, PiggyBank } from "lucide-react";
 import { useAuth } from "../../../lib/auth-context";
 import ThemeToggle from "../../../components/theme-toggle";
 import Link from "next/link";
@@ -205,7 +205,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-green-500 to-blue-500 rounded-2xl mb-4">
-            <Circle className="h-8 w-8 text-white" />
+            <PiggyBank className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
             Pig Farm
