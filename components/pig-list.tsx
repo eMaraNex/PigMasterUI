@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Plus, Circle, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown } from "lucide-react"
+import { Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
 import type { PigListProps, Pig as PigType } from "@/types";
 import EditPigDialog from "@/components/edit-pig-dialog";
 import AddKitDialog from "@/components/add-kit-dialog";
@@ -202,7 +202,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       render: (value: string, row: PigType) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full flex items-center justify-center">
-            <Circle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <PiggyBank className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
             <p className="font-semibold text-gray-900 dark:text-gray-100">{value || "Unnamed"}</p>
@@ -304,7 +304,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       >
         <div className="text-center space-y-4 p-8 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800">
           <div className="w-12 h-12 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center mx-auto">
-            <Circle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            <PiggyBank className="h-6 w-6 text-red-600 dark:text-red-400" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Oops! Something went wrong</h3>
@@ -335,7 +335,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
-                <Circle className="h-6 w-6 text-white" />
+                <PiggyBank className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Pig Colony</h1>

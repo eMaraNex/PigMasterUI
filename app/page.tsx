@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Circle, Heart, Pill, AlertTriangle, Building } from "lucide-react";
+import { PiggyBank, Heart, Pill, AlertTriangle, Building } from "lucide-react";
 import HutchLayout from "@/components/hutch-layout";
 import PigProfile from "@/components/pig-profile";
 import BreedingManager from "@/components/breeding-manager";
@@ -489,7 +489,7 @@ const DashboardContent: React.FC = () => {
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Total Pigs</CardTitle>
                         <div className="p-1.5 sm:p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
-                          <Circle className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                            <PiggyBank className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -681,7 +681,7 @@ const DashboardContent: React.FC = () => {
            <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 shadow-xl max-w-2xl mx-auto">
               <CardHeader className="space-y-1 pb-6">
                 <CardTitle className="text-2xl font-bold text-center dark:text-white flex items-center justify-center space-x-2">
-                  <Circle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  <PiggyBank className="h-6 w-6 text-green-600 dark:text-green-400" />
                   <span>Welcome to Pig Farming</span>
                 </CardTitle>
                 <p className="text-gray-600 dark:text-gray-300 text-center">No farm created yet</p>
