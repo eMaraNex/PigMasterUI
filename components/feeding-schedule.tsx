@@ -14,9 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useState, useEffect } from "react"
 import type { FeedingScheduleProps, Pig } from "@/types"
-import { hutchNamesConversion } from "@/lib/utils"
+import { penNamesConversion } from "@/lib/utils"
 
-export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps) {
+export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const { user } = useAuth()
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
@@ -144,7 +144,7 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-xs sm:text-sm text-gray-900 dark:text-gray-100 truncate">{pig?.name}</p>
                             <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                              {pig?.hutch_id} • {dailyAmount}
+                              {pig?.pen_id} • {dailyAmount}
                             </p>
                           </div>
                           <Badge
@@ -173,7 +173,7 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
         <CardHeader className="pb-3 sm:pb-4">
           <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
             <span className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">Individual Feeding Status</span>
-            <Dialog open={addOpen} onOpenChange={(v)=>setAddOpen(v)}>
+            <Dialog open={addOpen} onOpenChange={(v) => setAddOpen(v)}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white w-full sm:w-auto">
                   <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
@@ -184,44 +184,44 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                 <DialogHeader>
                   <DialogTitle>Record feeding</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={async(e)=>{
-                    e.preventDefault();
-                    if(!user?.farm_id){ showError('Error','Missing farm info'); return }
-                    try{
-                      const payload = { ...form, farm_id: user.farm_id }
-                      const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                      const added = resp?.data?.data ?? resp?.data
-                      // update local pigs feeding schedule (lastFed)
-                      if (added?.pig_id && added?.feeding_time) {
-                        setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
-                      }
-                      showSuccess('Success','Feeding recorded')
-                      setAddOpen(false)
-                    }catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) }
-                  }}>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
+                  try {
+                    const payload = { ...form, farm_id: user.farm_id }
+                    const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                    const added = resp?.data?.data ?? resp?.data
+                    // update local pigs feeding schedule (lastFed)
+                    if (added?.pig_id && added?.feeding_time) {
+                      setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
+                    }
+                    showSuccess('Success', 'Feeding recorded')
+                    setAddOpen(false)
+                  } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) }
+                }}>
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs font-medium">Pig</label>
-                      <Select value={form.pig_id} onValueChange={(v)=>setForm({...form,pig_id:v})}>
-                        <SelectTrigger className="w-full"><SelectValue/></SelectTrigger>
+                      <Select value={form.pig_id} onValueChange={(v) => setForm({ ...form, pig_id: v })}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {localPigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
+                          {localPigs?.map(p => <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
                       <label className="text-xs font-medium">Feed type</label>
-                      <Input value={form.feed_type} onChange={(e)=>setForm({...form,feed_type:e.target.value})}/>
+                      <Input value={form.feed_type} onChange={(e) => setForm({ ...form, feed_type: e.target.value })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs font-medium">Amount</label>
-                        <Input value={form.amount} onChange={(e)=>setForm({...form,amount:e.target.value})}/>
+                        <Input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
                       </div>
                       <div>
                         <label className="text-xs font-medium">Unit</label>
-                        <Select value={form.unit} onValueChange={(v)=>setForm({...form,unit:v})}>
-                          <SelectTrigger className="w-full"><SelectValue/></SelectTrigger>
+                        <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="grams">grams</SelectItem>
                             <SelectItem value="kg">kg</SelectItem>
@@ -232,17 +232,17 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                     </div>
                     <div>
                       <label className="text-xs font-medium">Notes</label>
-                      <Textarea value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})}/>
+                      <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                     </div>
                     <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={()=>setAddOpen(false)}>Cancel</Button>
+                      <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
                       <Button type="submit">Record</Button>
                     </div>
                   </div>
                 </form>
               </DialogContent>
             </Dialog>
-            
+
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
@@ -266,7 +266,7 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
                     <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      Hutch {hutchNamesConversion(hutches, pig.hutch_id ?? '')} • {pig?.breed} • {pig?.gender === "female" ? "Sow" : "Boar"}
+                      Pen {penNamesConversion(pens, pig.pen_id ?? '')} • {pig?.breed} • {pig?.gender === "female" ? "Sow" : "Boar"}
                     </p>
                     <div className="mt-2 space-y-1">
                       <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
@@ -306,21 +306,21 @@ export default function FeedingSchedule({ pigs, hutches }: FeedingScheduleProps)
                       size="sm"
                       variant="outline"
                       className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 ml-2 sm:ml-0 flex-shrink-0"
-                      onClick={async ()=>{
-                        try{
-                          if (!user?.farm_id) { showError('Error','Missing farm info'); return }
+                      onClick={async () => {
+                        try {
+                          if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
                           // try to use pig feedingSchedule data if available
                           const amount = pig?.feedingSchedule?.dailyAmount || '0'
                           const feedType = pig?.feedingSchedule?.feedType || 'pellets'
                           const payload = { pig_id: pig.pig_id, farm_id: user.farm_id, feed_type: feedType, amount: amount, unit: 'grams', feeding_time: new Date().toISOString() }
                           const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                            const added = resp?.data?.data ?? resp?.data
-                            // update local pig state with lastFed so UI updates without full page reload
-                            if (added?.pig_id && added?.feeding_time) {
-                              setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
-                            }
-                            showSuccess('Success','Feeding recorded')
-                        }catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) }
+                          const added = resp?.data?.data ?? resp?.data
+                          // update local pig state with lastFed so UI updates without full page reload
+                          if (added?.pig_id && added?.feeding_time) {
+                            setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
+                          }
+                          showSuccess('Success', 'Feeding recorded')
+                        } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) }
                       }}
                     >
                       <Utensils className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />

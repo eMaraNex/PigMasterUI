@@ -25,29 +25,29 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
     birth_date: pig.birth_date ? new Date(pig.birth_date).toISOString().split("T")[0] : "",
     gender: pig.gender || "male",
     is_pregnant: pig.is_pregnant || false,
-    hutch_id: pig.hutch_id || "",
+    pen_id: pig.pen_id || "",
     pregnancy_start_date: pig.pregnancy_start_date ? new Date(pig.pregnancy_start_date).toISOString().split("T")[0] : "",
     expected_birth_date: pig.expected_birth_date ? new Date(pig.expected_birth_date).toISOString().split("T")[0] : "",
     boar_id: pig.mated_with || "",
     mating_date: pig.last_mating_date ? new Date(pig.last_mating_date).toISOString().split("T")[0] : "",
   });
 
- 
+
   const [error, setError] = useState<string | null>(null);
   const [boars, setBoars] = useState<PigType[]>([]);
-   const [farmBreeds, setFarmBreeds] = useState<string[]>([]);
-    const [farmColors, setFarmColors] = useState<string[]>([]);
+  const [farmBreeds, setFarmBreeds] = useState<string[]>([]);
+  const [farmColors, setFarmColors] = useState<string[]>([]);
   const { showSuccess, showError, showWarn } = useToast();
 
-    const farmData = useMemo(() => {
-      const data = localStorage.getItem('pig_farm_data');
-      return data ? JSON.parse(data) : {};
-    }, []);
-  
-    useEffect(() => {
-      setFarmBreeds(farmData.breeds || breeds);
-      setFarmColors(farmData.colors || colors);
-    }, [farmData]);
+  const farmData = useMemo(() => {
+    const data = localStorage.getItem('pig_farm_data');
+    return data ? JSON.parse(data) : {};
+  }, []);
+
+  useEffect(() => {
+    setFarmBreeds(farmData.breeds || breeds);
+    setFarmColors(farmData.colors || colors);
+  }, [farmData]);
 
   // Check if the pig is pregnant and has been served
   const isPregnantAndServed = pig.is_pregnant && (pig.last_mating_date || pig.pregnancy_start_date);
@@ -108,7 +108,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
         birth_date: isPregnantAndServed ? pig.birth_date : formData.birth_date || null,
         gender: isPregnantAndServed ? pig.gender : formData.gender as "male" | "female",
         is_pregnant: formData.is_pregnant,
-        hutch_id: formData.hutch_id || null,
+        pen_id: formData.pen_id || null,
         pregnancy_start_date: formData.is_pregnant ? formData.pregnancy_start_date || null : null,
         expected_birth_date: formData.is_pregnant ? formData.expected_birth_date || null : null,
         status: "active",
@@ -355,7 +355,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
                             key={boar.pig_id}
                             value={boar.pig_id ?? ""}
                           >
-                            {boar.name} ({boar.hutch_id || "N/A"}) -{" "}
+                            {boar.name} ({boar.pen_id || "N/A"}) -{" "}
                             {boar.breed}
                           </SelectItem>
                         ))}

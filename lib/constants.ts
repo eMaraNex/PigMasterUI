@@ -95,7 +95,7 @@ export const reasons = [
   "Retirement",
   "Health issues",
   "Other",
-  "Transfer to another hutch",
+  "Transfer to another pen",
   "Lost",
   "Stolen",
 ];
@@ -670,30 +670,33 @@ export const timezones = [
   },
 ];
 
-export const roles: Record<number, { name: string; description: string; permissions: string[] }> = {
+export const roles: Record<
+  number,
+  { name: string; description: string; permissions: string[] }
+> = {
   46: {
     name: "free",
     description: "Free tier - Basic access",
-    permissions: ["basic_records", "view_reports"]
+    permissions: ["basic_records", "view_reports"],
   },
   47: {
     name: "standard",
     description: "Standard tier - Enhanced features",
-    permissions: ["analytics", "exports", "multi_user"]
+    permissions: ["analytics", "exports", "multi_user"],
   },
   48: {
     name: "advanced",
     description: "Advanced tier - Full access",
-    permissions: ["unlimited_pigs", "sms_alerts", "integrations", "automation"]
+    permissions: ["unlimited_pigs", "sms_alerts", "integrations", "automation"],
   },
   49: {
     name: "admin",
     description: "Admin role - Full farm management",
-    permissions: ["all"]
+    permissions: ["all"],
   },
   50: {
     name: "superadmin",
     description: "SuperAdmin role - System-wide control",
-    permissions: ["all", "manage_roles"]
-  }
+    permissions: ["all", "manage_roles"],
+  },
 };

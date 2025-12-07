@@ -2,41 +2,41 @@
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 
-interface HutchLayoutVisualizationProps {
+interface PenLayoutVisualizationProps {
   capacity?: number
   levels?: number
   className?: string
 }
 
-export default function HutchLayoutVisualization({
+export default function PenLayoutVisualization({
   capacity = 12,
   levels = 3,
   className,
-}: HutchLayoutVisualizationProps) {
-  const [animatedHutches, setAnimatedHutches] = useState<Set<string>>(new Set())
+}: PenLayoutVisualizationProps) {
+  const [animatedPens, setAnimatedPens] = useState<Set<string>>(new Set())
 
-  const hutchesPerLevel = Math.floor(capacity / levels)
+  const pensPerLevel = Math.floor(capacity / levels)
   const levelNames = Array.from({ length: levels }, (_, i) => String.fromCharCode(65 + i)) // A, B, C...
 
   useEffect(() => {
-    // Animate hutches appearing one by one
+    // Animate pens appearing one by one
     const timer = setTimeout(() => {
-      const allHutches: string[] = []
+      const allPens: string[] = []
       levelNames.forEach((level) => {
-        for (let i = 1; i <= hutchesPerLevel; i++) {
-          allHutches.push(`${level}${i}`)
+        for (let i = 1; i <= pensPerLevel; i++) {
+          allPens.push(`${level}${i}`)
         }
       })
 
-      allHutches.forEach((hutch, index) => {
+      allPens.forEach((pen, index) => {
         setTimeout(() => {
-          setAnimatedHutches((prev) => new Set([...prev, hutch]))
+          setAnimatedPens((prev) => new Set([...prev, pen]))
         }, index * 100)
       })
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [capacity, levels, hutchesPerLevel, levelNames])
+  }, [capacity, levels, pensPerLevel, levelNames])
 
   return (
     <div className={cn("w-full max-w-md mx-auto", className)}>
@@ -44,7 +44,7 @@ export default function HutchLayoutVisualization({
         <div className="text-center mb-4">
           <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Row Structure Preview</h4>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {capacity} hutches across {levels} levels
+            {capacity} pens across {levels} levels
           </p>
         </div>
 
@@ -57,19 +57,19 @@ export default function HutchLayoutVisualization({
                   {level}
                 </div>
                 <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Level {level} ({hutchesPerLevel} hutches)
+                  Level {level} ({pensPerLevel} pens)
                 </div>
               </div>
 
-              {/* Hutches Grid */}
+              {/* Pens Grid */}
               <div className="grid grid-cols-4 gap-2 ml-11">
-                {Array.from({ length: hutchesPerLevel }, (_, hutchIndex) => {
-                  const hutchId = `${level}${hutchIndex + 1}`
-                  const isAnimated = animatedHutches.has(hutchId)
+                {Array.from({ length: pensPerLevel }, (_, penIndex) => {
+                  const penId = `${level}${penIndex + 1}`
+                  const isAnimated = animatedPens.has(penId)
 
                   return (
                     <div
-                      key={hutchId}
+                      key={penId}
                       className={cn(
                         "relative h-12 rounded-lg border-2 transition-all duration-300 transform",
                         isAnimated
@@ -77,10 +77,10 @@ export default function HutchLayoutVisualization({
                           : "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 scale-95 opacity-50",
                       )}
                       style={{
-                        animationDelay: `${(levelIndex * hutchesPerLevel + hutchIndex) * 100}ms`,
+                        animationDelay: `${(levelIndex * pensPerLevel + penIndex) * 100}ms`,
                       }}
                     >
-                      {/* Hutch Door */}
+                      {/* Pen Door */}
                       <div
                         className={cn(
                           "absolute inset-1 rounded border transition-colors duration-300",
@@ -89,7 +89,7 @@ export default function HutchLayoutVisualization({
                             : "bg-gray-200 dark:bg-gray-600 border-gray-400 dark:border-gray-500",
                         )}
                       >
-                        {/* Hutch ID */}
+                        {/* Pen ID */}
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span
                             className={cn(
@@ -97,7 +97,7 @@ export default function HutchLayoutVisualization({
                               isAnimated ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400",
                             )}
                           >
-                            {hutchId}
+                            {penId}
                           </span>
                         </div>
 
@@ -138,7 +138,7 @@ export default function HutchLayoutVisualization({
             </div>
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-300 rounded" />
-              <span>Hutch</span>
+              <span>Pen</span>
             </div>
           </div>
         </div>

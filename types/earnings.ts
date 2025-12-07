@@ -6,14 +6,22 @@ export interface EarningsRecord {
   currency: string;
   date: string;
   weight?: number;
-  sale_type: "whole" | "meat_only" | "skin_only" | "meat_and_skin" | "bulk" | "processed" | "other" | undefined;
+  sale_type:
+    | "whole"
+    | "meat_only"
+    | "skin_only"
+    | "meat_and_skin"
+    | "bulk"
+    | "processed"
+    | "other"
+    | undefined;
   includes_urine?: boolean;
   includes_manure?: boolean;
   buyer_name?: string;
   notes?: string;
   created_at?: string;
   farm_id: string;
-  hutch_id?: string;
+  pen_id?: string;
 }
 
 export interface ProductionRecord {

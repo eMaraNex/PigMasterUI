@@ -30,9 +30,9 @@ export default function EarningsTracker() {
   const { showSuccess, showError, showWarn } = useToast();
 
   const [earningsForm, setEarningsForm] = useState<{
-    type: "pig_sale" |"manure_sale" | "other";
+    type: "pig_sale" | "manure_sale" | "other";
     pig_id?: string;
-    hutch_id?: string;
+    pen_id?: string;
     amount: string;
     date: string;
     weight?: string;
@@ -252,7 +252,7 @@ export default function EarningsTracker() {
       const newEarning: EarningsRecord = {
         type: earningsForm.type,
         pig_id: earningsForm.pig_id,
-        hutch_id: earningsForm.hutch_id,
+        pen_id: earningsForm.pen_id,
         weight: earningsForm.weight ? Number.parseFloat(earningsForm.weight) : 0,
         sale_type: finalSaleType,
         includes_urine: earningsForm.includes_urine || false,
@@ -544,7 +544,7 @@ export default function EarningsTracker() {
                     </div>
                     <div>
                       <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
-                        Source (Hutch/Pig ID)
+                        Source (Pen/Pig ID)
                       </Label>
                       <Input
                         value={productionForm.source}
@@ -679,7 +679,7 @@ export default function EarningsTracker() {
                             sale_type: getDefaultSaleType(value),
                             ...(value !== "pig_sale" && {
                               pig_id: undefined,
-                              hutch_id: undefined,
+                              pen_id: undefined,
                               weight: undefined,
                               includes_urine: undefined,
                               includes_manure: undefined,
@@ -738,13 +738,13 @@ export default function EarningsTracker() {
                           />
                         </div>
                         <div>
-                          <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">Hutch ID</Label>
+                          <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">Pen ID</Label>
                           <Input
-                            value={earningsForm.hutch_id || ""}
+                            value={earningsForm.pen_id || ""}
                             onChange={(e) =>
                               setEarningsForm({
                                 ...earningsForm,
-                                hutch_id: e.target.value,
+                                pen_id: e.target.value,
                               })
                             }
                             className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
@@ -814,7 +814,7 @@ export default function EarningsTracker() {
                       </div>
                     )}
 
-                    {( earningsForm.type === "manure_sale") && (
+                    {(earningsForm.type === "manure_sale") && (
                       <div>
                         <Label className="text-gray-900 dark:text-gray-100 text-xs sm:text-sm">Buyer Name</Label>
                         <Input
@@ -975,15 +975,14 @@ export default function EarningsTracker() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
                         <Badge
                           variant="outline"
-                          className={`w-fit text-xs whitespace-nowrap ${
-                            earning.type === "pig_sale"
-                              ? "bg-pink-50 dark:bg-pink-900/30 border-pink-200 dark:border-pink-700 text-pink-800 dark:text-pink-300"
-                              : earning.type === "urine_sale"
+                          className={`w-fit text-xs whitespace-nowrap ${earning.type === "pig_sale"
+                            ? "bg-pink-50 dark:bg-pink-900/30 border-pink-200 dark:border-pink-700 text-pink-800 dark:text-pink-300"
+                            : earning.type === "urine_sale"
                               ? "bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300"
                               : earning.type === "manure_sale"
-                              ? "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-800 dark:text-green-300"
-                              : "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300"
-                          }`}
+                                ? "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-800 dark:text-green-300"
+                                : "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300"
+                            }`}
                         >
                           {earning.type.replace("_", " ").toUpperCase()}
                         </Badge>

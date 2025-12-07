@@ -12,7 +12,7 @@ import axios from "axios";
 import * as utils from "@/lib/utils";
 import type { Pig, EarningsRecord, ReportsProps } from "@/types";
 
-export default function ReportsDashboard({ hutches }: ReportsProps) {
+export default function ReportsDashboard({ pens }: ReportsProps) {
   const { formatAmount, convertToBaseCurrency } = useCurrency();
   const { user } = useAuth();
   const [pigs, setPigs] = useState<Pig[]>([]);
@@ -73,14 +73,14 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
       .filter((r) => r.gender === "male")
       .map((boar) => {
         const offspring = safePigs.filter((r) => r.parent_male_id === boar.pig_id);
-        const total_kits = offspring.reduce((sum, r) => sum + (r.total_kits || 0), 0);
+        const total_piglets = offspring.reduce((sum, r) => sum + (r.total_piglets || 0), 0);
         return {
           ...boar,
           totalOffspring: offspring.length,
-          total_kits: total_kits,
+          total_piglets: total_piglets,
         };
       })
-      .sort((a, b) => b.total_kits - a.total_kits);
+      .sort((a, b) => b.total_piglets - a.total_piglets);
 
     return boarPerformance[0] || null;
   };
@@ -89,7 +89,7 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
     const safePigs = pigs || [];
     const sowsPerformance = safePigs
       .filter((r) => r.gender === "female")
-      .sort((a, b) => (b.total_kits || 0) - (a.total_kits || 0));
+      .sort((a, b) => (b.total_piglets || 0) - (a.total_piglets || 0));
     return sowsPerformance[0] || null;
   };
 
@@ -131,15 +131,15 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
     return totalSows > 0 ? (pregnantSows / totalSows) * 100 : 0;
   };
 
-  const getAverageKitsPerLitter = () => {
+  const getAveragePigletsPerLitter = () => {
     const safePigs = pigs || [];
     const sowsWithLitters = safePigs.filter((r) => r.gender === "female" && (r.total_litters || 0) > 0);
     if (sowsWithLitters.length === 0) return 0;
 
-    const total_kits = sowsWithLitters.reduce((sum, r) => sum + (r.total_kits || 0), 0) || 0;
+    const total_piglets = sowsWithLitters.reduce((sum, r) => sum + (r.total_piglets || 0), 0) || 0;
     const total_litters = sowsWithLitters.reduce((sum, r) => sum + (r.total_litters || 0), 0) || 0;
 
-    return total_litters > 0 ? total_kits / total_litters : 0;
+    return total_litters > 0 ? total_piglets / total_litters : 0;
   };
 
   const getProductivityByBreed = () => {
@@ -150,7 +150,7 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
         if (!acc[breed]) {
           acc[breed] = {
             count: 0,
-            total_kits: 0,
+            total_piglets: 0,
             total_litters: 0,
             avgWeight: 0,
             totalWeight: 0,
@@ -158,7 +158,7 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
         }
 
         acc[breed].count++;
-        acc[breed].total_kits += pig.total_kits || 0;
+        acc[breed].total_piglets += pig.total_piglets || 0;
         acc[breed].total_litters += pig.total_litters || 0;
         acc[breed].totalWeight += pig.weight || 0;
 
@@ -169,12 +169,12 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
 
     Object.keys(breedStats).forEach((breed) => {
       breedStats[breed].avgWeight = breedStats[breed].count > 0 ? breedStats[breed].totalWeight / breedStats[breed].count : 0;
-      breedStats[breed].avgKitsPerPig = breedStats[breed].count > 0 ? breedStats[breed].total_kits / breedStats[breed].count : 0;
+      breedStats[breed].avgPigletsPerPig = breedStats[breed].count > 0 ? breedStats[breed].total_piglets / breedStats[breed].count : 0;
     });
 
     return Object.entries(breedStats)
       .map(([breed, stats]) => ({ breed, ...stats }))
-      .sort((a, b) => b.avgKitsPerPig - a.avgKitsPerPig);
+      .sort((a, b) => b.avgPigletsPerPig - a.avgPigletsPerPig);
   };
 
   const topBoar = getTopPerformingBoar();
@@ -182,7 +182,7 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
   const birthsInPeriod = getBirthsInPeriod();
   const earningsComparison = getEarningsComparison();
   const breedingEfficiency = getBreedingEfficiency();
-  const avgKitsPerLitter = getAverageKitsPerLitter();
+  const avgPigletsPerLitter = getAveragePigletsPerLitter();
   const breedProductivity = getProductivityByBreed();
 
   return (
@@ -266,11 +266,11 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
 
         <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
           <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-gray-900 dark:text-gray-100">Avg Kits/Litter</CardTitle>
+            <CardTitle className="text-base sm:text-lg text-gray-900 dark:text-gray-100">Avg Piglets/Litter</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-400 dark:to-indigo-400 bg-clip-text text-transparent">
-              {avgKitsPerLitter.toFixed(1)}
+              {avgPigletsPerLitter.toFixed(1)}
             </div>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Average productivity</p>
           </CardContent>
@@ -312,16 +312,16 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
                     <p className="font-medium text-gray-900 dark:text-gray-100">{topBoar.breed}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400">Total Kits Sired:</p>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{topBoar.total_kits}</p>
+                    <p className="text-gray-600 dark:text-gray-400">Total Piglets Sired:</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{topBoar.total_piglets}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 dark:text-gray-400">Weight:</p>
                     <p className="font-medium text-gray-900 dark:text-gray-100">{topBoar.weight}kg</p>
                   </div>
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400">Hutch:</p>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{utils.hutchNamesConversion(hutches, topBoar.hutch_id ?? '')}</p>
+                    <p className="text-gray-600 dark:text-gray-400">Pen:</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{utils.penNamesConversion(pens, topBoar.pen_id ?? '')}</p>
                   </div>
                 </div>
               </div>
@@ -351,8 +351,8 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
                     <p className="font-medium text-gray-900 dark:text-gray-100">{topSow.breed}</p>
                   </div>
                   {/* <div>
-                    <p className="text-gray-600 dark:text-gray-400">Total Kits:</p>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{topSow.total_kits}</p>
+                    <p className="text-gray-600 dark:text-gray-400">Total Piglets:</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{topSow.total_piglets}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 dark:text-gray-400">Total Litters:</p>
@@ -369,8 +369,8 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
                     <p className="font-medium text-gray-900 dark:text-gray-100">{topSow.weight}kg</p>
                   </div>
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400">Hutch:</p>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{utils.hutchNamesConversion(hutches, topSow.hutch_id ?? '')}</p>
+                    <p className="text-gray-600 dark:text-gray-400">Pen:</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{utils.penNamesConversion(pens, topSow.pen_id ?? '')}</p>
                   </div>
                 </div>
               </div>
@@ -413,9 +413,9 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
                 <div className="flex justify-between sm:block sm:text-right">
                   <div>
                     <p className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">
-                      {breed.avgKitsPerPig.toFixed(1)} kits/pig
+                      {breed.avgPigletsPerPig.toFixed(1)} piglets/pig
                     </p>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{breed.total_kits} total kits</p>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{breed.total_piglets} total piglets</p>
                   </div>
                 </div>
               </div>
@@ -443,7 +443,7 @@ export default function ReportsDashboard({ hutches }: ReportsProps) {
                   <div className="flex-1">
                     <div className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{breed.breed}</div>
                     <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      {breed.count} pigs • Avg {breed.avgKitsPerPig.toFixed(1)} kits/pig
+                      {breed.count} pigs • Avg {breed.avgPigletsPerPig.toFixed(1)} piglets/pig
                     </div>
                   </div>
                   <div className="flex justify-between sm:block sm:text-right">

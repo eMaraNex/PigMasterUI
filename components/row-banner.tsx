@@ -23,7 +23,7 @@ const RowBanner: React.FC<RowBannerProps> = ({ onRowAdded }) => {
                             No Row set up yet
                         </p>
                         <p className="text-xs text-amber-700 dark:text-amber-300">
-                            Create a Row to start adding your pigs into hutches.
+                            Create a Row to start adding your pigs into pens.
                         </p>
                     </div>
                 </div>

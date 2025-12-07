@@ -63,7 +63,7 @@ const PigListSkeleton: React.FC<PigListSkeletonProps> = () => {
                   "Name",
                   "Gender",
                   "Breed",
-                  "Total Kits",
+                  "Total Piglets",
                   "Litters",
                   "Status",
                   "Actions",

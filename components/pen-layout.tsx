@@ -7,11 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Building, Circle, Plus, Trash2, History, Eye, AlertTriangle, Expand, MoreVertical, Edit } from "lucide-react";
+import { Building, Circle, Plus, Trash2, History, Eye, AlertTriangle, Expand, MoreVertical, Edit, PiggyBank } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import AddPigDialog from "@/components/add-pig-dialog";
 import RemovePigDialog from "@/components/remove-pig-dialog";
-import type { Hutch, HutchLayoutProps, Pig as PigType, Row } from "@/types";
+import type { Pen, PenLayoutProps, Pig as PigType, Row } from "@/types";
 import * as utils from "@/lib/utils";
 import axios from "axios";
 import { useAuth } from "@/lib/auth-context";
@@ -19,21 +19,21 @@ import { useToast } from "@/lib/toast-provider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import RowDialog from "./add-row-dialog";
 
-export default function HutchLayout({ hutches, pigs: initialPigs, rows, onPigSelect, onRowAdded, handleAddRow }: HutchLayoutProps) {
-  const [selectedHutch, setSelectedHutch] = useState<string | null>(null);
+export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, onRowAdded, handleAddRow }: PenLayoutProps) {
+  const [selectedPen, setSelectedPen] = useState<string | null>(null);
   const [addPigOpen, setAddPigOpen] = useState(false);
   const [removePigOpen, setRemovePigOpen] = useState(false);
-  const [addHutchOpen, setAddHutchOpen] = useState(false);
-  const [removeHutchOpen, setRemoveHutchOpen] = useState(false);
+  const [addPenOpen, setAddPenOpen] = useState(false);
+  const [removePenOpen, setRemovePenOpen] = useState(false);
   const [expandCapacityOpen, setExpandCapacityOpen] = useState(false);
-  const [hutchToRemove, setHutchToRemove] = useState<string | null>(null);
+  const [penToRemove, setPenToRemove] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [removalHistory, setRemovalHistory] = useState<any[]>([]);
   const [pigs, setPigs] = useState<PigType[]>(initialPigs);
-  const [newHutchData, setNewHutchData] = useState({ row_name: "", row_id: "", level: "", position: "1" });
+  const [newPenData, setNewPenData] = useState({ row_name: "", row_id: "", level: "", position: "1" });
   const [expandRowData, setExpandRowData] = useState({ row_name: "", row_id: "", additionalCapacity: "" });
   const { user } = useAuth();
-  const [selectedHutchDetails, setSelectedHutchDetails] = useState<Hutch | null>(null);
+  const [selectedPenDetails, setSelectedPenDetails] = useState<Pen | null>(null);
   const { showSuccess, showError, showWarn } = useToast();
   const [editRowOpen, setEditRowOpen] = useState(false);
   const [editRowData, setEditRowData] = useState<{
@@ -43,41 +43,41 @@ export default function HutchLayout({ hutches, pigs: initialPigs, rows, onPigSel
   }>({ row_id: "", row_name: "", description: "" });
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-    useEffect(() => {
+  useEffect(() => {
     setPigs(initialPigs);
   }, [initialPigs]);
 
-const handleDeleteRow = async (rowId: string, rowName: string) => {
-  try {
-    const token = localStorage.getItem("pig_farm_token");
-    if (!token) throw new Error("Authentication token missing");
-    if (!user?.farm_id) throw new Error("Farm ID missing");
+  const handleDeleteRow = async (rowId: string, rowName: string) => {
+    try {
+      const token = localStorage.getItem("pig_farm_token");
+      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
 
-    const data = await axios.delete(`${utils.apiUrl}/rows/delete/${user.farm_id}/${rowId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    
-    if(data){
-      showSuccess("Success", `Row ${rowName} deleted successfully!`);
-      const rowsString = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
-      if (rowsString) {
-        const currentRows = JSON.parse(rowsString);
-        const updatedRows = currentRows.filter((row: any) => row.id !== rowId);
-        localStorage.setItem(`pig_farm_rows_${user.farm_id}`, JSON.stringify(updatedRows));
+      const data = await axios.delete(`${utils.apiUrl}/rows/delete/${user.farm_id}/${rowId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (data) {
+        showSuccess("Success", `Row ${rowName} deleted successfully!`);
+        const rowsString = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
+        if (rowsString) {
+          const currentRows = JSON.parse(rowsString);
+          const updatedRows = currentRows.filter((row: any) => row.id !== rowId);
+          localStorage.setItem(`pig_farm_rows_${user.farm_id}`, JSON.stringify(updatedRows));
+        }
       }
+
+      if (selectedPen && pens.find(h => h.row_name === rowName && h.name === selectedPen)) {
+        setSelectedPen(null);
+        handleCloseDialogs();
+      }
+      setOpenDropdown(null);
+
+      if (onRowAdded) onRowAdded();
+    } catch (error: any) {
+      showError("Error", error.response?.data?.message || "Failed to delete row.");
     }
-    
-    if (selectedHutch && hutches.find(h => h.row_name === rowName && h.name === selectedHutch)) {
-      setSelectedHutch(null);
-      handleCloseDialogs();
-    }
-    setOpenDropdown(null);
-    
-    if (onRowAdded) onRowAdded();
-  } catch (error: any) {
-    showError("Error", error.response?.data?.message || "Failed to delete row.");
-  }
-};
+  };
 
   const handleEditRow = (row: Row) => {
     setEditRowData({
@@ -88,24 +88,24 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
     setEditRowOpen(true);
   };
 
-  const getPigsInHutch = useCallback((hutch_name: string) => {
-    return pigs.filter((pig) => pig.hutch_name === hutch_name) ?? [];
+  const getPigsInPen = useCallback((pen_name: string) => {
+    return pigs.filter((pig) => pig.pen_name === pen_name) ?? [];
   }, [pigs]);
 
-  const handleSetHutchDetails = (hutchId: string) => {
-    const selectedHutch = hutches.find((item: Hutch) => item.id === hutchId) || null;
-    setSelectedHutchDetails(selectedHutch);
+  const handleSetPenDetails = (penId: string) => {
+    const selectedPen = pens.find((item: Pen) => item.id === penId) || null;
+    setSelectedPenDetails(selectedPen);
   };
 
-  const getHutch = useCallback((hutch_name: string) => {
-    return hutches.find((hutch) => hutch.name === hutch_name) || null;
-  }, [hutches]);
+  const getPen = useCallback((pen_name: string) => {
+    return pens.find((pen) => pen.name === pen_name) || null;
+  }, [pens]);
 
-  const getRowHutches = useCallback((row_id: string | undefined) => {
-    return hutches.filter((hutch) => hutch.row_id === row_id);
-  }, [hutches]);
+  const getRowPens = useCallback((row_id: string | undefined) => {
+    return pens.filter((pen) => pen.row_id === row_id);
+  }, [pens]);
 
-  const getRemovalHistory = useCallback(async (hutchId: string) => {
+  const getRemovalHistory = useCallback(async (penId: string) => {
     try {
       const token = localStorage.getItem("pig_farm_token");
       const cachedUser = JSON.parse(localStorage.getItem("pig_farm_user") || "{}");
@@ -115,11 +115,11 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
         return [];
       }
 
-      const response = await axios.get(`${utils.apiUrl}/hutches/${farmId}/${hutchId}/history`, {
+      const response = await axios.get(`${utils.apiUrl}/pens/${farmId}/${penId}/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const newRemovalRecords = response.data?.data || [];
-      const filteredRecords = newRemovalRecords.filter((record: any) => record.hutch_id === hutchId && record.removed_at !== null);
+      const filteredRecords = newRemovalRecords.filter((record: any) => record.pen_id === penId && record.removed_at !== null);
       localStorage.setItem("pig_farm_pig_removals", JSON.stringify(filteredRecords));
       return filteredRecords;
     } catch (error) {
@@ -130,25 +130,25 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
 
   useEffect(() => {
     const fetchRemovalHistory = async () => {
-      if (selectedHutchDetails?.id) {
-        const history = await getRemovalHistory(selectedHutchDetails.id);
+      if (selectedPenDetails?.id) {
+        const history = await getRemovalHistory(selectedPenDetails.id);
         setRemovalHistory(history);
       }
     };
     fetchRemovalHistory();
-  }, [selectedHutchDetails, getRemovalHistory]);
+  }, [selectedPenDetails, getRemovalHistory]);
 
   const handleRemovalSuccess = useCallback(async (removedPigId: string) => {
-    if (selectedHutchDetails?.id) {
+    if (selectedPenDetails?.id) {
       setPigs((prev) => prev.filter((r) => r.pig_id !== removedPigId));
-      const history = await getRemovalHistory(selectedHutchDetails.id);
+      const history = await getRemovalHistory(selectedPenDetails.id);
       setRemovalHistory(history);
       setShowHistory(true);
     }
-  }, [selectedHutchDetails, getRemovalHistory]);
+  }, [selectedPenDetails, getRemovalHistory]);
 
-  const handleHutchClick = (hutchId: string) => {
-    setSelectedHutch(hutchId);
+  const handlePenClick = (penId: string) => {
+    setSelectedPen(penId);
   };
 
   const handleAddPig = () => {
@@ -159,24 +159,24 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
     setRemovePigOpen(true);
   };
 
-  const handleAddHutch = (row_name: string) => {
+  const handleAddPen = (row_name: string) => {
     const row = rows.find((r) => r.name === row_name);
     if (!row) {
       showError('Error', "Row not found.")
       return;
     }
-    const rowHutches = getRowHutches(row?.id);
-    if (rowHutches.length >= row.capacity) {
-      showWarn('Error', `Row ${row_name} is at full capacity (${row.capacity} hutches). Please expand the capacity first to add more hutches.`)
+    const rowPens = getRowPens(row?.id);
+    if (rowPens.length >= row.capacity) {
+      showWarn('Error', `Row ${row_name} is at full capacity (${row.capacity} pens). Please expand the capacity first to add more pens.`)
       return;
     }
-    setNewHutchData({
+    setNewPenData({
       row_name,
       row_id: row.id ?? "",
       level: row.levels[0] || "A",
       position: "1"
     });
-    setAddHutchOpen(true);
+    setAddPenOpen(true);
   };
 
   const handleExpandRowCapacity = async () => {
@@ -191,7 +191,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
       }
 
       if (additionalCapacity > 20) {
-        showWarn('Error', "Maximum additional capacity is 20 hutches per expansion.")
+        showWarn('Error', "Maximum additional capacity is 20 pens per expansion.")
         return;
       }
 
@@ -209,7 +209,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
       );
 
       if (response.data.success) {
-        showSuccess('Success', `Row ${expandRowData.row_name} capacity expanded by ${additionalCapacity} hutches!`);
+        showSuccess('Success', `Row ${expandRowData.row_name} capacity expanded by ${additionalCapacity} pens!`);
         setExpandCapacityOpen(false);
         setExpandRowData({ row_name: "", row_id: "", additionalCapacity: "" });
         if (onRowAdded) onRowAdded();
@@ -219,22 +219,22 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
     }
   };
 
-  const handleAddHutchSubmit = async () => {
+  const handleAddPenSubmit = async () => {
     try {
-      const row = rows.find((r) => r.name === newHutchData.row_name);
+      const row = rows.find((r) => r.name === newPenData.row_name);
       if (!row) throw new Error("Row not found");
-      const rowHutches = getRowHutches(row?.id);
-      if (rowHutches.length >= row.capacity) {
-        showWarn('Error', `Cannot add more hutches to ${newHutchData.row_name}. Row capacity reached.`);
+      const rowPens = getRowPens(row?.id);
+      if (rowPens.length >= row.capacity) {
+        showWarn('Error', `Cannot add more pens to ${newPenData.row_name}. Row capacity reached.`);
         return;
       }
-      const hutchName = `${newHutchData.row_name}-${newHutchData.level}${newHutchData.position}`;
-      const newHutch = {
-        name: hutchName,
+      const penName = `${newPenData.row_name}-${newPenData.level}${newPenData.position}`;
+      const newPen = {
+        name: penName,
         farm_id: user?.farm_id || "",
-        row_id: newHutchData.row_id,
-        level: newHutchData.level,
-        position: parseInt(newHutchData.position),
+        row_id: newPenData.row_id,
+        level: newPenData.level,
+        position: parseInt(newPenData.position),
         size: "medium",
         material: "wire",
         features: ["water bottle", "feeder"],
@@ -243,34 +243,34 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
       };
       const token = localStorage.getItem("pig_farm_token");
       if (!token) throw new Error("Authentication token missing");
-      await axios.post(`${utils.apiUrl}/hutches/${user?.farm_id}`, newHutch, {
+      await axios.post(`${utils.apiUrl}/pens/${user?.farm_id}`, newPen, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      showSuccess('Success', `Hutch ${hutchName} added successfully!`)
-      setAddHutchOpen(false);
+      showSuccess('Success', `Pen ${penName} added successfully!`)
+      setAddPenOpen(false);
       if (onRowAdded) onRowAdded();
     } catch (error: any) {
       showError('Error', error.response?.data?.message)
     }
   };
 
-  const handleRemoveHutchSubmit = async () => {
+  const handleRemovePenSubmit = async () => {
     try {
-      const hutch = getHutch(hutchToRemove!);
-      if (!hutch) throw new Error("Hutch not found");
-      if (getPigsInHutch(hutch.name).length > 0) {
-        showWarn('Warn', "Cannot remove hutch with pigs. Please remove pigs first.")
+      const pen = getPen(penToRemove!);
+      if (!pen) throw new Error("Pen not found");
+      if (getPigsInPen(pen.name).length > 0) {
+        showWarn('Warn', "Cannot remove pen with pigs. Please remove pigs first.")
         return;
       }
       const token = localStorage.getItem("pig_farm_token");
       if (!token) throw new Error("Authentication token missing");
-      await axios.delete(`${utils.apiUrl}/hutches/${user?.farm_id}/${hutch.id}`, {
+      await axios.delete(`${utils.apiUrl}/pens/${user?.farm_id}/${pen.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      showSuccess('Success', `Hutch ${hutch.name} removed successfully!`);
-      setRemoveHutchOpen(false);
-      setHutchToRemove(null);
-      setSelectedHutch(null);
+      showSuccess('Success', `Pen ${pen.name} removed successfully!`);
+      setRemovePenOpen(false);
+      setPenToRemove(null);
+      setSelectedPen(null);
       if (onRowAdded) onRowAdded();
     } catch (error: any) {
       showError('Error', error.response?.data?.message)
@@ -280,18 +280,18 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
   const handleCloseDialogs = useCallback(() => {
     setAddPigOpen(false);
     setRemovePigOpen(false);
-    setAddHutchOpen(false);
-    setRemoveHutchOpen(false);
+    setAddPenOpen(false);
+    setRemovePenOpen(false);
     setExpandCapacityOpen(false);
     setEditRowOpen(false);
-    setHutchToRemove(null);
+    setPenToRemove(null);
     setShowHistory(false);
     setExpandRowData({ row_name: "", row_id: "", additionalCapacity: "" });
     setEditRowData({ row_id: "", row_name: "", description: "" });
-    if (!addPigOpen && !removePigOpen && !addHutchOpen && !removeHutchOpen && !expandCapacityOpen && !editRowOpen) {
-      setSelectedHutch(null);
+    if (!addPigOpen && !removePigOpen && !addPenOpen && !removePenOpen && !expandCapacityOpen && !editRowOpen) {
+      setSelectedPen(null);
     }
-  }, [addPigOpen, removePigOpen, addHutchOpen, removeHutchOpen, expandCapacityOpen, editRowOpen]);
+  }, [addPigOpen, removePigOpen, addPenOpen, removePenOpen, expandCapacityOpen, editRowOpen]);
 
   const handlePigAdded = useCallback(
     (newPig: PigType) => {
@@ -309,7 +309,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
     <div className="space-y-4 md:space-y-6 lg:space-y-8 p-2 md:p-4 lg:p-6">
       <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0 gap-2 md:gap-4">
         <h2 className="text-lg md:text-xl lg:text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 dark:from-green-400 dark:to-blue-400 text-transparent bg-clip-text">
-          Hutch Layout - Row Management
+          Pen Layout - Row Management
         </h2>
         <Badge
           variant="outline"
@@ -341,9 +341,9 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
             {rows.map(row => {
-              const rowHutches = getRowHutches(row?.id);
+              const rowPens = getRowPens(row?.id);
               const levels = row.levels || ["A", "B", "C"];
-              const isAtCapacity = rowHutches.length >= row.capacity;
+              const isAtCapacity = rowPens.length >= row.capacity;
 
               return (
                 <Card
@@ -368,52 +368,52 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                             </Badge>
                           )}
                         </div>
-                      <DropdownMenu
-                        open={openDropdown === row.name}
-                        onOpenChange={(open) => {
-                          setOpenDropdown(open ? row.name : null);
-                          if (!open) {
-                            document.body.focus();
-                          }
-                        }}
-                      >
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              setOpenDropdown(openDropdown === row.name ? null : row.name);
-                            }}
-                          >
-                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              handleEditRow(row);
-                              setOpenDropdown(null); 
-                            }}
-                            className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 text-sm"
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              handleDeleteRow(row.id ?? "", row.name);
-                              setOpenDropdown(null); 
-                            }}
-                            className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50 text-sm"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        <DropdownMenu
+                          open={openDropdown === row.name}
+                          onOpenChange={(open) => {
+                            setOpenDropdown(open ? row.name : null);
+                            if (!open) {
+                              document.body.focus();
+                            }
+                          }}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setOpenDropdown(openDropdown === row.name ? null : row.name);
+                              }}
+                            >
+                              <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600">
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                handleEditRow(row);
+                                setOpenDropdown(null);
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 text-sm"
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                handleDeleteRow(row.id ?? "", row.name);
+                                setOpenDropdown(null);
+                              }}
+                              className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50 text-sm"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
 
                       <div className="flex items-center justify-between space-x-2">
@@ -421,23 +421,22 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                           variant="outline"
                           className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300 text-xs md:text-sm"
                         >
-                          {rowHutches.filter(h => getPigsInHutch(h.id).length > 0).length}/
+                          {rowPens.filter(h => getPigsInPen(h.id).length > 0).length}/
                           {row.capacity} Occupied
                         </Badge>
 
                         <div className="flex space-x-2">
                           <Button
                             size="sm"
-                            onClick={() => handleAddHutch(row.name)}
+                            onClick={() => handleAddPen(row.name)}
                             disabled={isAtCapacity}
-                            className={`${
-                              isAtCapacity
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-green-500 hover:bg-green-600"
-                            } text-white transition-colors text-xs md:text-sm`}
+                            className={`${isAtCapacity
+                              ? "bg-gray-400 cursor-not-allowed"
+                              : "bg-green-500 hover:bg-green-600"
+                              } text-white transition-colors text-xs md:text-sm`}
                           >
                             <Plus className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
-                            <span className="hidden sm:inline">Add Hutch</span>
+                            <span className="hidden sm:inline">Add Pen</span>
                             <span className="sm:hidden">Add</span>
                           </Button>
                           <Button
@@ -465,14 +464,14 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                         {row.description || "No description provided."}
                       </p>
                       <div className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                        Capacity: {rowHutches.length}/{row.capacity}
+                        Capacity: {rowPens.length}/{row.capacity}
                       </div>
                     </div>
                   </CardHeader>
 
                   <CardContent className="space-y-3 md:space-y-4 bg-gradient-to-br from-white/50 to-gray-50/50 dark:from-gray-800/50 dark:to-gray-900/50 p-3 md:p-6">
                     {levels.map(level => {
-                      const levelHutches = rowHutches.filter(
+                      const levelPens = rowPens.filter(
                         h => h.level === level
                       );
                       return (
@@ -480,91 +479,82 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                           <div className="flex items-center space-x-2">
                             <Badge
                               variant="secondary"
-                              className={`bg-gradient-to-r from-${
-                                level === "A"
-                                  ? "red"
-                                  : level === "B"
+                              className={`bg-gradient-to-r from-${level === "A"
+                                ? "red"
+                                : level === "B"
                                   ? "yellow"
                                   : "blue"
-                              }-100 to-${
-                                level === "A"
+                                }-100 to-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-200 dark:from-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-200 dark:from-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-900/40 dark:to-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-900/40 dark:to-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-800/40 text-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-800/40 text-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-800 dark:text-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-800 dark:text-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-300 border-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-300 border-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-200 dark:border-${
-                                level === "A"
+                                    ? "yellow"
+                                    : "blue"
+                                }-200 dark:border-${level === "A"
                                   ? "red"
                                   : level === "B"
-                                  ? "yellow"
-                                  : "blue"
-                              }-700 text-xs`}
+                                    ? "yellow"
+                                    : "blue"
+                                }-700 text-xs`}
                             >
                               Level {level}
                             </Badge>
                           </div>
 
                           <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-4 xl:grid-cols-6 gap-1 md:gap-2">
-                            {levelHutches.map(hutch => {
-                              const pigsInHutch = getPigsInHutch(
-                                hutch.name
+                            {levelPens.map(pen => {
+                              const pigsInPen = getPigsInPen(
+                                pen.name
                               );
-                              const isOccupied = pigsInHutch.length > 0;
-                              const sows = pigsInHutch.filter(
+                              const isOccupied = pigsInPen.length > 0;
+                              const sows = pigsInPen.filter(
                                 r => r.gender === "female"
                               ).length;
-                              const boars = pigsInHutch.filter(
+                              const boars = pigsInPen.filter(
                                 r => r.gender === "male"
                               ).length;
                               return (
                                 <Card
-                                  key={hutch.id}
-                                  className={`group cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${
-                                    selectedHutch === hutch.name
-                                      ? "ring-2 ring-blue-500 dark:ring-blue-400 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 border-blue-300 dark:border-blue-600"
-                                      : isOccupied
+                                  key={pen.id}
+                                  className={`group cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-105 ${selectedPen === pen.name
+                                    ? "ring-2 ring-blue-500 dark:ring-blue-400 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 border-blue-300 dark:border-blue-600"
+                                    : isOccupied
                                       ? "bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/40 dark:to-green-800/40 border-green-200 dark:border-green-700"
                                       : "bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/60 dark:to-gray-700/60 border-gray-200 dark:border-gray-600"
-                                  }`}
+                                    }`}
                                   onClick={() => {
-                                    handleHutchClick(hutch.name);
-                                    handleSetHutchDetails(hutch.id);
+                                    handlePenClick(pen.name);
+                                    handleSetPenDetails(pen.id);
                                   }}
                                 >
                                   <CardContent className="p-2 md:p-3 text-center">
                                     <div className="text-xs font-bold mb-1 text-gray-900 dark:text-gray-100">
-                                      {hutch.level}
-                                      {hutch.position}
+                                      {pen.level}
+                                      {pen.position}
                                     </div>
                                     {isOccupied ? (
                                       <>
@@ -588,8 +578,8 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                                         onClick={e => {
                                           e.stopPropagation();
                                           e.preventDefault();
-                                          setHutchToRemove(hutch.name);
-                                          setRemoveHutchOpen(true);
+                                          setPenToRemove(pen.name);
+                                          setRemovePenOpen(true);
                                         }}
                                         className="p-1 h-6 w-6 text-xs"
                                       >
@@ -612,9 +602,9 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
         )}
       </div>
 
-      {/* Add Hutch Dialog with updated preview */}
-      {addHutchOpen && (
-        <Dialog open={addHutchOpen} onOpenChange={setAddHutchOpen}>
+      {/* Add Pen Dialog with updated preview */}
+      {addPenOpen && (
+        <Dialog open={addPenOpen} onOpenChange={setAddPenOpen}>
           <DialogContent
             className="w-[95vw] max-w-md md:max-w-lg bg-white/95 dark:bg-gray-800/95 backdrop-blur-md mx-auto"
             onInteractOutside={e => e.preventDefault()}
@@ -624,7 +614,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
               <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
                 <Plus className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
                 <span className="truncate">
-                  Add New Hutch to {newHutchData.row_name}
+                  Add New Pen to {newPenData.row_name}
                 </span>
               </DialogTitle>
             </DialogHeader>
@@ -635,9 +625,9 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                     Level
                   </Label>
                   <Select
-                    value={newHutchData.level}
+                    value={newPenData.level}
                     onValueChange={value =>
-                      setNewHutchData({ ...newHutchData, level: value })
+                      setNewPenData({ ...newPenData, level: value })
                     }
                   >
                     <SelectTrigger className="text-sm md:text-base">
@@ -645,7 +635,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                     </SelectTrigger>
                     <SelectContent>
                       {rows
-                        .find(r => r.name === newHutchData.row_name)
+                        .find(r => r.name === newPenData.row_name)
                         ?.levels.map((level: string) => (
                           <SelectItem
                             key={level}
@@ -663,9 +653,9 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                     Position
                   </Label>
                   <Select
-                    value={newHutchData.position}
+                    value={newPenData.position}
                     onValueChange={value =>
-                      setNewHutchData({ ...newHutchData, position: value })
+                      setNewPenData({ ...newPenData, position: value })
                     }
                   >
                     <SelectTrigger className="text-sm md:text-base">
@@ -687,29 +677,29 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
                 <p className="text-sm md:text-base text-blue-800 dark:text-blue-300">
-                  <strong>Hutch ID:</strong> {newHutchData.row_name}-
-                  {newHutchData.level}
-                  {newHutchData.position}
+                  <strong>Pen ID:</strong> {newPenData.row_name}-
+                  {newPenData.level}
+                  {newPenData.position}
                 </p>
                 <p className="text-xs md:text-sm text-blue-600 dark:text-blue-400 mt-1">
-                  This hutch will be added to {newHutchData.row_name} row at
-                  level {newHutchData.level}, position {newHutchData.position}
+                  This pen will be added to {newPenData.row_name} row at
+                  level {newPenData.level}, position {newPenData.position}
                 </p>
               </div>
               <div className="flex flex-col space-y-2 md:flex-row md:justify-end md:space-y-0 md:space-x-2">
                 <Button
                   variant="outline"
-                  onClick={() => setAddHutchOpen(false)}
+                  onClick={() => setAddPenOpen(false)}
                   className="bg-white/50 dark:bg-gray-700/50 text-sm md:text-base w-full md:w-auto"
                 >
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleAddHutchSubmit}
+                  onClick={handleAddPenSubmit}
                   className="bg-green-500 hover:bg-green-600 text-white text-sm md:text-base w-full md:w-auto"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Hutch
+                  Add Pen
                 </Button>
               </div>
             </div>
@@ -717,17 +707,17 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
         </Dialog>
       )}
 
-      {/* Hutch Details Modal */}
-      {selectedHutch && !removeHutchOpen && (
+      {/* Pen Details Modal */}
+      {selectedPen && !removePenOpen && (
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 z-50">
           <Card
-            key={selectedHutch}
+            key={selectedPen}
             className="w-full max-w-sm md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-white/20 dark:border-gray-600/20 shadow-2xl"
           >
             <CardHeader className="bg-gradient-to-r from-green-50/80 to-blue-50/80 dark:from-green-900/30 dark:to-blue-900/30 border-b border-gray-200 dark:border-gray-600 p-4 md:p-6">
               <CardTitle className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0 gap-2 md:gap-4">
                 <span className="text-base md:text-lg lg:text-xl text-gray-900 dark:text-gray-100 truncate">
-                  Hutch Details - {selectedHutch}
+                  Pen Details - {selectedPen}
                 </span>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -748,22 +738,22 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
 
             <CardContent className="space-y-4 md:space-y-6 bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-4 md:p-6">
               {(() => {
-                const hutch = getHutch(selectedHutch);
-                const pigsInHutch = getPigsInHutch(selectedHutch);
+                const pen = getPen(selectedPen);
+                const pigsInPen = getPigsInPen(selectedPen);
 
                 return (
                   <>
-                    {hutch ? (
+                    {pen ? (
                       <>
-                        {/* Hutch Information */}
+                        {/* Pen Information */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 p-3 md:p-4 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg border border-blue-200 dark:border-blue-700">
                           <div>
                             <h4 className="font-medium text-blue-800 dark:text-blue-300 text-sm md:text-base">
                               Location
                             </h4>
                             <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {hutch.row_name} Row - Level {hutch.level},
-                              Position {hutch.position}
+                              {pen.row_name} Row - Level {pen.level},
+                              Position {pen.position}
                             </p>
                           </div>
                           <div>
@@ -771,7 +761,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                               Specifications
                             </h4>
                             <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {hutch.size} size, {hutch.material} material
+                              {pen.size} size, {pen.material} material
                             </p>
                           </div>
                           <div>
@@ -779,7 +769,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                               Features
                             </h4>
                             <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {hutch.features.join(", ")}
+                              {pen.features.join(", ")}
                             </p>
                           </div>
                         </div>
@@ -788,27 +778,26 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                         <div>
                           <div className="flex items-center justify-between mb-3 md:mb-4">
                             <h4 className="font-medium text-base md:text-lg text-gray-900 dark:text-gray-100">
-                              Current Pigs ({pigsInHutch.length})
+                              Current Pigs ({pigsInPen.length})
                             </h4>
                             <Badge
                               variant={
-                                pigsInHutch.length > 0
+                                pigsInPen.length > 0
                                   ? "default"
                                   : "secondary"
                               }
-                              className={`${
-                                pigsInHutch.length > 0
-                                  ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
-                                  : ""
-                              } text-xs md:text-sm`}
+                              className={`${pigsInPen.length > 0
+                                ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
+                                : ""
+                                } text-xs md:text-sm`}
                             >
-                              {pigsInHutch.length > 0 ? "Occupied" : "Empty"}
+                              {pigsInPen.length > 0 ? "Occupied" : "Empty"}
                             </Badge>
                           </div>
 
-                          {pigsInHutch.length > 0 ? (
+                          {pigsInPen.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                              {pigsInHutch.map(pig => (
+                              {pigsInPen.map(pig => (
                                 <Card
                                   key={pig.id}
                                   className="bg-gradient-to-br from-green-50/80 to-green-100/80 dark:from-green-900/30 dark:to-green-800/30 border-green-200 dark:border-green-700"
@@ -853,9 +842,9 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                             </div>
                           ) : (
                             <div className="text-center py-6 md:py-8 bg-gradient-to-br from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600">
-                              <Circle className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                                <PiggyBank className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
                               <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-                                No pigs in this hutch
+                                No pigs in this pen
                               </p>
                             </div>
                           )}
@@ -906,7 +895,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                             ) : (
                               <div className="text-center py-3 md:py-4 bg-gradient-to-br from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600">
                                 <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-                                  No removal history for this hutch
+                                  No removal history for this pen
                                 </p>
                               </div>
                             )}
@@ -915,7 +904,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                       </>
                     ) : (
                       <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
-                        Hutch not found.
+                        Pen not found.
                       </p>
                     )}
                   </>
@@ -925,14 +914,14 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
               {/* Action Buttons */}
               <div className="flex flex-col space-y-2 md:flex-row md:justify-end md:space-y-0 md:space-x-3 pt-3 md:pt-4 border-t border-gray-200 dark:border-gray-600">
                 {(() => {
-                  const hutch = getHutch(selectedHutch);
-                  const pigsInHutch = hutch
-                    ? getPigsInHutch(selectedHutch)
+                  const pen = getPen(selectedPen);
+                  const pigsInPen = pen
+                    ? getPigsInPen(selectedPen)
                     : [];
 
                   return (
                     <>
-                      {pigsInHutch.length < 2 && (
+                      {pigsInPen.length < 2 && (
                         <Button
                           onClick={handleAddPig}
                           className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm md:text-base w-full md:w-auto"
@@ -941,7 +930,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                           Add Pig
                         </Button>
                       )}
-                      {pigsInHutch.length > 0 && (
+                      {pigsInPen.length > 0 && (
                         <Button
                           variant="destructive"
                           onClick={handleRemovePig}
@@ -968,20 +957,20 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
       )}
 
       {/* Dialogs */}
-      {addPigOpen && selectedHutch && (
+      {addPigOpen && selectedPen && (
         <AddPigDialog
-          hutch_name={selectedHutch}
-          hutch_id={selectedHutchDetails?.id || ""}
+          pen_name={selectedPen}
+          pen_id={selectedPenDetails?.id || ""}
           onClose={handleCloseDialogs}
           onPigAdded={handlePigAdded}
         />
       )}
 
-      {removePigOpen && selectedHutch && (
+      {removePigOpen && selectedPen && (
         <RemovePigDialog
-          hutch_name={selectedHutch}
-          hutch_id={selectedHutchDetails?.id || ""}
-          pig={pigs.find(r => r.hutch_name === selectedHutch)}
+          pen_name={selectedPen}
+          pen_id={selectedPenDetails?.id || ""}
+          pig={pigs.find(r => r.pen_name === selectedPen)}
           onClose={handleCloseDialogs}
           onRemovalSuccess={handleRemovalSuccess}
         />
@@ -1008,7 +997,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                 const currentRow = rows.find(
                   r => r.name === expandRowData.row_name
                 );
-                const currentHutches = getRowHutches(expandRowData.row_id);
+                const currentPens = getRowPens(expandRowData.row_id);
 
                 return (
                   <>
@@ -1021,7 +1010,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                       </div>
                       <p className="text-xs md:text-sm text-amber-700 dark:text-amber-400">
                         Row <strong>{expandRowData.row_name}</strong> currently
-                        has <strong>{currentHutches.length}</strong> hutches out
+                        has <strong>{currentPens.length}</strong> pens out
                         of <strong>{currentRow?.capacity}</strong> maximum
                         capacity.
                       </p>
@@ -1039,7 +1028,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                         type="number"
                         min="1"
                         max="20"
-                        placeholder="Enter number of additional hutches (1-20)"
+                        placeholder="Enter number of additional pens (1-20)"
                         value={expandRowData.additionalCapacity}
                         onChange={e =>
                           setExpandRowData({
@@ -1050,7 +1039,7 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                         className="mt-2 text-sm md:text-base"
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Recommended values: 3, 6, 9, 12 hutches
+                        Recommended values: 3, 6, 9, 12 pens
                       </p>
                     </div>
 
@@ -1069,13 +1058,13 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                               {(currentRow?.capacity || 0) +
                                 parseInt(expandRowData.additionalCapacity)}
                             </strong>{" "}
-                            hutches
+                            pens
                             <br />
                             Available space for{" "}
                             <strong>
                               {parseInt(expandRowData.additionalCapacity)}
                             </strong>{" "}
-                            new hutches
+                            new pens
                           </p>
                         </div>
                       )}
@@ -1126,13 +1115,13 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
           rowToEdit={rows.find(r => r.id === editRowData.row_id) || null}
         />
       )}
-      {removeHutchOpen && hutchToRemove && (
-        <Dialog open={removeHutchOpen} onOpenChange={setRemoveHutchOpen}>
+      {removePenOpen && penToRemove && (
+        <Dialog open={removePenOpen} onOpenChange={setRemovePenOpen}>
           <DialogContent className="w-[95vw] max-w-md md:max-w-lg bg-white/95 dark:bg-gray-800/95 backdrop-blur-md mx-auto">
             <DialogHeader className="space-y-2">
               <DialogTitle className="flex items-center gap-2 text-base md:text-lg">
                 <Trash2 className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
-                <span className="truncate">Remove Hutch {hutchToRemove}</span>
+                <span className="truncate">Remove Pen {penToRemove}</span>
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
@@ -1144,17 +1133,17 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                   </span>
                 </div>
                 <p className="text-xs md:text-sm text-red-700 dark:text-red-400">
-                  Are you sure you want to remove hutch{" "}
-                  <strong>{hutchToRemove}</strong>? This action cannot be undone
-                  and will permanently delete the hutch from your farm.
+                  Are you sure you want to remove pen{" "}
+                  <strong>{penToRemove}</strong>? This action cannot be undone
+                  and will permanently delete the pen from your farm.
                 </p>
               </div>
               <div className="flex flex-col space-y-2 md:flex-row md:justify-end md:space-y-0 md:space-x-2">
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setRemoveHutchOpen(false);
-                    setHutchToRemove(null);
+                    setRemovePenOpen(false);
+                    setPenToRemove(null);
                   }}
                   className="bg-white/50 dark:bg-gray-700/50 text-sm md:text-base w-full md:w-auto"
                 >
@@ -1162,11 +1151,11 @@ const handleDeleteRow = async (rowId: string, rowName: string) => {
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={handleRemoveHutchSubmit}
+                  onClick={handleRemovePenSubmit}
                   className="bg-red-500 hover:bg-red-600 text-sm md:text-base w-full md:w-auto"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Remove Hutch
+                  Remove Pen
                 </Button>
               </div>
             </div>

@@ -2,7 +2,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Building, Grid3X3, Layers, Info } from "lucide-react"
-import HutchLayoutVisualization from "@/components/hutch-layout-visualization"
+import PenLayoutVisualization from "@/components/pen-layout-visualization"
 
 interface RowTutorialModalProps {
   open: boolean
@@ -13,7 +13,7 @@ export default function RowTutorialModal({ open, onCreateRow }: RowTutorialModal
   return (
     <Dialog
       open={open}
-      onOpenChange={() => {}} 
+      onOpenChange={() => { }}
     >
       <DialogContent
         className="sm:max-w-2xl bg-white dark:bg-gray-900 rounded-lg max-h-[80vh] overflow-y-auto"
@@ -35,14 +35,14 @@ export default function RowTutorialModal({ open, onCreateRow }: RowTutorialModal
               <div>
                 <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-2">What is a Row?</h3>
                 <p className="text-sm text-blue-700 dark:text-blue-400">
-                  A row is a block structure that contains multiple hutches (cages) on a single or multiple levels,  where you'll house your pigs.
+                  A row is a block structure that contains multiple pens (cages) on a single or multiple levels,  where you'll house your pigs.
                   Think of it as an organized housing unit for your farm.
                 </p>
               </div>
             </div>
           </div>
 
-          <HutchLayoutVisualization capacity={12} levels={3} />
+          <PenLayoutVisualization capacity={12} levels={3} />
 
           <div className="space-y-4">
             <div className="flex items-start gap-3">
@@ -50,7 +50,7 @@ export default function RowTutorialModal({ open, onCreateRow }: RowTutorialModal
               <div>
                 <h4 className="font-medium text-gray-800 dark:text-gray-200 mb-1">Row Levels</h4>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Each row can have 1-4 levels (A, B, C, D) stacked vertically. Levels are like the block floors that you have vertically. 
+                  Each row can have 1-4 levels (A, B, C, D) stacked vertically. Levels are like the block floors that you have vertically.
                 </p>
               </div>
             </div>
@@ -58,9 +58,9 @@ export default function RowTutorialModal({ open, onCreateRow }: RowTutorialModal
             <div className="flex items-start gap-3">
               <Grid3X3 className="h-5 w-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="font-medium text-gray-800 dark:text-gray-200 mb-1">Hutches Distribution</h4>
+                <h4 className="font-medium text-gray-800 dark:text-gray-200 mb-1">Pens Distribution</h4>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Hutches are evenly distributed across levels. For example: 15 total hutches with 3 levels = 5 hutches
+                  Pens are evenly distributed across levels. For example: 15 total pens with 3 levels = 5 pens
                   per level (A1-A5, B1-B5, C1-C5).
                 </p>
               </div>
@@ -74,13 +74,13 @@ export default function RowTutorialModal({ open, onCreateRow }: RowTutorialModal
                 • <strong>Row Name:</strong> Mercury (or custom name)
               </p>
               <p>
-                • <strong>Capacity:</strong> 12 hutches total
+                • <strong>Capacity:</strong> 12 pens total
               </p>
               <p>
                 • <strong>Levels:</strong> 3 levels (A, B, C)
               </p>
               <p>
-                • <strong>Distribution:</strong> 4 hutches per level
+                • <strong>Distribution:</strong> 4 pens per level
               </p>
               <p>
                 • <strong>Result:</strong> A1-A4, B1-B4, C1-C4

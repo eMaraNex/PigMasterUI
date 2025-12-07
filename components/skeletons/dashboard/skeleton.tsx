@@ -29,7 +29,7 @@ const SkeletonDashboard: React.FC = () => {
           <TabsList className="inline-flex justify-start w-full overflow-x-auto bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm">
             {[
               "overview",
-              "hutches",
+              "pens",
               "breeding",
               "health",
               "feeding",

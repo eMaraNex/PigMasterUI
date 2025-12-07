@@ -1,7 +1,7 @@
 import { Pig } from "./pigs";
 import { Row } from "./rows";
 
-export interface Hutch {
+export interface Pen {
   id: string;
   name: string;
   row_id: string;
@@ -19,8 +19,8 @@ export interface Hutch {
   row_name: string;
 }
 
-export interface HutchLayoutProps {
-  hutches: Hutch[];
+export interface PenLayoutProps {
+  pens: Pen[];
   pigs: Pig[];
   rows: Row[];
   onPigSelect: (pig: Pig) => void;

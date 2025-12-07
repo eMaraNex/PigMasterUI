@@ -200,7 +200,7 @@ export default function AnalyticsCharts() {
     const successfulBreedings = pigs.reduce((sum, r) => sum + (r.total_litters || 0), 0)
     return Math.round((successfulBreedings / Math.max(totalAttempts, 1)) * 100)
   }
-  const getHutchOccupancy = (): OccupancyData[] => {
+  const getPenOccupancy = (): OccupancyData[] => {
     try {
       const farmId = user?.farm_id || "default-farm";
       const rowsData = JSON.parse(localStorage.getItem(`pig_farm_rows_${farmId}`) || '[]') as Row[];
@@ -211,7 +211,7 @@ export default function AnalyticsCharts() {
         { name: "Available", value: totalCapacity - totalOccupied, color: "#3b82f6" },
       ];
     } catch (error) {
-      console.error("Error in getHutchOccupancy:", error);
+      console.error("Error in getPenOccupancy:", error);
       return [
         { name: "Occupied", value: 0, color: "#10b981" },
         { name: "Available", value: 0, color: "#3b82f6" },
@@ -292,7 +292,7 @@ export default function AnalyticsCharts() {
   const ageDistribution = getAgeDistribution();
   const feedConsumption = getFeedConsumption();
   const breedingSuccess = getBreedingSuccess();
-  const hutchOccupancy = getHutchOccupancy();
+  const penOccupancy = getPenOccupancy();
   const weightTrends = getWeightTrends();
   const mortalityRate = getMortalityRate();
   const genderDistribution = getGenderDistribution();
@@ -574,19 +574,19 @@ export default function AnalyticsCharts() {
 
           <TabsContent value="financial" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Hutch Occupancy */}
+              {/* Pen Occupancy */}
               <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-0 shadow-xl">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Home className="h-5 w-5 text-indigo-500" />
-                    <span>Hutch Occupancy Rate</span>
+                    <span>Pen Occupancy Rate</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <RechartsPieChart>
                       <Pie
-                        data={hutchOccupancy}
+                        data={penOccupancy}
                         cx="50%"
                         cy="50%"
                         innerRadius={80}
@@ -594,7 +594,7 @@ export default function AnalyticsCharts() {
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        {hutchOccupancy.map((entry, index) => (
+                        {penOccupancy.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
@@ -605,7 +605,7 @@ export default function AnalyticsCharts() {
                   <div className="text-center mt-4">
                     <Badge variant="secondary" className="text-lg px-4 py-2">
                       {Math.round(
-                        (hutchOccupancy[0].value / (hutchOccupancy[0].value + hutchOccupancy[1].value)) * 100,
+                        (penOccupancy[0].value / (penOccupancy[0].value + penOccupancy[1].value)) * 100,
                       )}
                       % Occupied
                     </Badge>

@@ -15,13 +15,13 @@ import { generatePigId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import axios from "axios";
 import * as utils from "@/lib/utils";
-import { AddPigDialogProps, Hutch, Pig, Row } from "@/types";
+import { AddPigDialogProps, Pen, Pig, Row } from "@/types";
 import { breeds, colors } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
 import { Checkbox } from "./ui/checkbox";
 import PreferenceModal from "./preference-modal";
 
-export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onClose, onPigAdded }: AddPigDialogProps) {
+export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, onPigAdded }: AddPigDialogProps) {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
     pig_id: generatePigId(user?.farm_id || "Default"),
@@ -34,16 +34,16 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
     parent_male_id: "",
     parent_female_id: "",
     row_id: "",
-    hutch_id: customHutches ? "" : hutch_id,
+    pen_id: customPens ? "" : pen_id,
   });
 
   const [rows, setRows] = useState<Row[]>([]);
-  const [hutches, setHutches] = useState<Hutch[]>([]);
-  const [filteredHutches, setFilteredHutches] = useState<Hutch[]>([]);
+  const [pens, setPens] = useState<Pen[]>([]);
+  const [filteredPens, setFilteredPens] = useState<Pen[]>([]);
   const [rowOpen, setRowOpen] = useState(false);
-  const [hutchOpen, setHutchOpen] = useState(false);
+  const [penOpen, setPenOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
-  const [selectedHutch, setSelectedHutch] = useState<Hutch | null>(null);
+  const [selectedPen, setSelectedPen] = useState<Pen | null>(null);
   const { showSuccess, showError, showWarn } = useToast();
 
   const [isBreedModalOpen, setIsBreedModalOpen] = useState(false);
@@ -62,7 +62,7 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
   }, [farmData]);
 
   useEffect(() => {
-    if (customHutches && user?.farm_id) {
+    if (customPens && user?.farm_id) {
       // Load rows from localStorage
       const rowsData = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
       if (rowsData) {
@@ -70,26 +70,26 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
         setRows(parsedRows.filter((row: Row) => row.is_deleted === 0));
       }
 
-      // Load hutches from localStorage
-      const hutchesData = localStorage.getItem(`pig_farm_hutches_${user.farm_id}`);
-      if (hutchesData) {
-        const parsedHutches = JSON.parse(hutchesData);
-        setHutches(parsedHutches.filter((hutch: Hutch) => hutch.is_deleted === 0));
+      // Load pens from localStorage
+      const pensData = localStorage.getItem(`pig_farm_pens_${user.farm_id}`);
+      if (pensData) {
+        const parsedPens = JSON.parse(pensData);
+        setPens(parsedPens.filter((pen: Pen) => pen.is_deleted === 0));
       }
     }
-  }, [customHutches, user?.farm_id]);
+  }, [customPens, user?.farm_id]);
 
   useEffect(() => {
     if (formData.row_id) {
-      const availableHutches = hutches.filter(hutch => hutch.row_id === formData.row_id);
-      setFilteredHutches(availableHutches);
-      // Reset hutch selection when row changes
-      setFormData(prev => ({ ...prev, hutch_id: "" }));
-      setSelectedHutch(null);
+      const availablePens = pens.filter(pen => pen.row_id === formData.row_id);
+      setFilteredPens(availablePens);
+      // Reset pen selection when row changes
+      setFormData(prev => ({ ...prev, pen_id: "" }));
+      setSelectedPen(null);
     } else {
-      setFilteredHutches([]);
+      setFilteredPens([]);
     }
-  }, [formData.row_id, hutches]);
+  }, [formData.row_id, pens]);
 
   const saveToStorage = (farmId: string, pigs: Pig[]) => {
     try {
@@ -106,11 +106,11 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
       return;
     }
 
-    const finalHutchId = customHutches ? formData.hutch_id : hutch_id;
-    const finalHutchName = customHutches ? (selectedHutch?.name || "") : hutch_name;
+    const finalPenId = customPens ? formData.pen_id : pen_id;
+    const finalPenName = customPens ? (selectedPen?.name || "") : pen_name;
 
-    if (!finalHutchId) {
-      showError('Error', 'Hutch ID is required.');
+    if (!finalPenId) {
+      showError('Error', 'Pen ID is required.');
       return;
     }
 
@@ -123,8 +123,8 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
       color: formData.color,
       birth_date: formData.birth_date,
       weight: Number.parseFloat(formData.weight) || 0,
-      hutch_id: finalHutchId,
-      hutch_name: finalHutchName,
+      pen_id: finalPenId,
+      pen_name: finalPenName,
       parent_male_id: formData.parent_male_id || undefined,
       parent_female_id: formData.parent_female_id || undefined,
       is_pregnant: false,
@@ -138,7 +138,7 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
       if (response.data.success) {
         const addedPig: Pig = {
           ...response.data.data,
-          hutch_name: finalHutchName
+          pen_name: finalPenName
         };
         // Update local storage
         const cachedPigs = localStorage.getItem(`pig_farm_pigs_${user.farm_id}`);
@@ -234,7 +234,7 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
               <PigIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
               <span>
                 Add Pig{" "}
-                {customHutches ? "to Custom Hutch" : `to Hutch ${hutch_name}`}
+                {customPens ? "to Custom Pen" : `to Pen ${pen_name}`}
               </span>
             </DialogTitle>
           </DialogHeader>
@@ -281,7 +281,7 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
               </div>
             </div>
 
-            {customHutches && (
+            {customPens && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label
@@ -360,26 +360,26 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
                 </div>
                 <div>
                   <Label
-                    htmlFor="hutch"
+                    htmlFor="pen"
                     className="text-gray-900 dark:text-gray-100"
                   >
-                    Hutch
+                    Pen
                   </Label>
-                  <Popover open={hutchOpen} onOpenChange={setHutchOpen}>
+                  <Popover open={penOpen} onOpenChange={setPenOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
-                        aria-expanded={hutchOpen}
+                        aria-expanded={penOpen}
                         disabled={!formData.row_id}
                         className="w-full h-12 justify-between bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
                       >
                         <span className="truncate">
-                          {selectedHutch
-                            ? selectedHutch.name
+                          {selectedPen
+                            ? selectedPen.name
                             : formData.row_id
-                            ? "Select hutch..."
-                            : "Select row first"}
+                              ? "Select pen..."
+                              : "Select row first"}
                         </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -391,44 +391,44 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
                     >
                       <Command className="bg-white dark:bg-gray-800">
                         <CommandInput
-                          placeholder="Search hutch..."
+                          placeholder="Search pen..."
                           className="h-9 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-0 focus:ring-0"
                         />
                         <CommandList className="max-h-[200px] overflow-y-auto scrollbar-thin">
                           <CommandEmpty className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                            No hutch found.
+                            No pen found.
                           </CommandEmpty>
                           <CommandGroup>
-                            {filteredHutches.map(hutch => (
+                            {filteredPens.map(pen => (
                               <CommandItem
-                                key={hutch.id}
-                                value={hutch.name}
+                                key={pen.id}
+                                value={pen.name}
                                 onSelect={() => {
                                   setFormData({
                                     ...formData,
-                                    hutch_id: hutch.id,
+                                    pen_id: pen.id,
                                   });
-                                  setSelectedHutch(hutch);
-                                  setHutchOpen(false);
+                                  setSelectedPen(pen);
+                                  setPenOpen(false);
                                 }}
                                 className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5"
                               >
                                 <Check
                                   className={cn(
                                     "mr-2 h-4 w-4",
-                                    formData.hutch_id === hutch.id
+                                    formData.pen_id === pen.id
                                       ? "opacity-100"
                                       : "opacity-0"
                                   )}
                                 />
                                 <div className="flex flex-col">
                                   <span className="font-medium">
-                                    {hutch.name}
+                                    {pen.name}
                                   </span>
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    Level {hutch.level} - Position{" "}
-                                    {hutch.position} -{" "}
-                                    {hutch.is_occupied
+                                    Level {pen.level} - Position{" "}
+                                    {pen.position} -{" "}
+                                    {pen.is_occupied
                                       ? "Occupied"
                                       : "Available"}
                                   </span>
@@ -615,10 +615,10 @@ export default function AddPigDialog({ hutch_name, hutch_id, customHutches, onCl
                 <li>• Health records: Empty (ready for first checkup)</li>
                 <li>• Breeding status: Not pregnant</li>
                 <li>
-                  • Hutch assignment:{" "}
-                  {customHutches
-                    ? selectedHutch?.name || "Select hutch"
-                    : hutch_name}
+                  • Pen assignment:{" "}
+                  {customPens
+                    ? selectedPen?.name || "Select pen"
+                    : pen_name}
                 </li>
               </ul>
             </div>

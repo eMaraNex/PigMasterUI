@@ -16,7 +16,7 @@ import type { Pig as PigType, EarningsRecord, RemovePigDialogProps } from "@/typ
 import { reasons, saleTypes } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
 
-export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, onRemovalSuccess }: RemovePigDialogProps) {
+export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemovalSuccess }: RemovePigDialogProps) {
   const { user } = useAuth();
   const { currency, getCurrencySymbol, getCurrencyRates } = useCurrency();
   const [formData, setFormData] = useState({
@@ -57,7 +57,7 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
       // Create removal record - update pig removals table
       const removalRecord = {
         pig_id: pig.pig_id,
-        hutch_id,
+        pen_id,
         farm_id: user.farm_id,
         reason: formData.reason.toLowerCase(),
         notes: formData.notes,
@@ -91,7 +91,7 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
           buyer_name: formData.sold_to,
           notes: formData.sale_notes,
           farm_id: user.farm_id,
-          hutch_id,
+          pen_id,
         };
 
         await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, earningsRecord, {
@@ -99,24 +99,24 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
         });
       }
 
-      // Fetch the latest removal history for the hutch
-      const response = await axios.get(`${utils.apiUrl}/hutches/${user.farm_id}/${hutch_id ?? removalRecord?.hutch_id}/history`, {
+      // Fetch the latest removal history for the pen
+      const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}/${pen_id ?? removalRecord?.pen_id}/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const newRemovalRecords = response.data?.data || [];
       const newFilteredRecords = newRemovalRecords.filter((record: any) => record?.removed_at !== null);
       localStorage.setItem("pig_farm_pig_removals", JSON.stringify(newFilteredRecords));
 
-      // Update local storage for pigs and hutches
+      // Update local storage for pigs and pens
       const cachedPigs = JSON.parse(localStorage.getItem(`pig_farm_pigs_${user.farm_id}`) || "[]") as PigType[];
       const updatedPigs = cachedPigs.filter((r: PigType) => r.pig_id !== pig.pig_id);
       localStorage.setItem(`pig_farm_pigs_${user.farm_id}`, JSON.stringify(updatedPigs));
 
-      const cachedHutches = JSON.parse(localStorage.getItem(`pig_farm_hutches_${user.farm_id}`) || "[]") as any[];
-      const updatedHutches = cachedHutches.map((h: any) =>
-        h.id === hutch_id ? { ...h, isOccupied: false } : h
+      const cachedPens = JSON.parse(localStorage.getItem(`pig_farm_pens_${user.farm_id}`) || "[]") as any[];
+      const updatedPens = cachedPens.map((h: any) =>
+        h.id === pen_id ? { ...h, isOccupied: false } : h
       );
-      localStorage.setItem(`pig_farm_hutches_${user.farm_id}`, JSON.stringify(updatedHutches));
+      localStorage.setItem(`pig_farm_pens_${user.farm_id}`, JSON.stringify(updatedPens));
       showSuccess('Success', `Pig ${pig.pig_id} removed successfully!`)
       onRemovalSuccess?.(pig.pig_id || "");
       onClose();
@@ -145,7 +145,7 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
           <DialogTitle className="flex items-center space-x-2 text-red-600 dark:text-red-400">
             <AlertTriangle className="h-5 w-5" />
             <span className="text-red-600 dark:text-red-400">
-              Remove Pig from {hutch_name}
+              Remove Pig from {pen_name}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -176,7 +176,7 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
               {Math.floor(
                 (new Date().getTime() -
                   new Date(pig.birth_date ?? new Date()).getTime()) /
-                  (1000 * 60 * 60 * 24 * 30)
+                (1000 * 60 * 60 * 24 * 30)
               )}{" "}
               months
             </p>
@@ -441,7 +441,7 @@ export default function RemovePigDialog({ hutch_id, hutch_name, pig, onClose, on
                 </h4>
                 <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
                   This action will permanently remove the pig from the active
-                  hutch. The removal will be logged in for keeping
+                  pen. The removal will be logged in for keeping
                   {isSale ? " and earnings will be recorded." : "."}
                 </p>
               </div>

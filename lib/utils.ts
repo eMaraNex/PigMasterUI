@@ -1,18 +1,18 @@
 import axios from "axios";
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-import type { Pig, Alert, Hutch } from "@/types";
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+import type { Pig, Alert, Pen } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 // Generate sequential pig IDs based on farm name
 export function generatePigId(farmId: string): string {
-  const tempFarm = localStorage.getItem('pig_farm_data') ?? '';
+  const tempFarm = localStorage.getItem("pig_farm_data") ?? "";
   const farmDetails = tempFarm ? JSON.parse(tempFarm) : {};
   const farmData = farmDetails.id === farmId ? farmDetails : null;
-  const farmName = farmData?.name ?? 'Default';
+  const farmName = farmData?.name ?? "Default";
   const words = farmName.trim().split(/\s+/);
   let prefix = "";
   if (words.length >= 2) {
@@ -28,7 +28,9 @@ export function generatePigId(farmId: string): string {
       existingIds = pigs
         .filter((pig: Pig) => pig.pig_id && pig.pig_id.startsWith(`${prefix}-`))
         .map((pig: Pig) => {
-          const idNum = pig.pig_id ? Number.parseInt(pig.pig_id.replace(`${prefix}-`, '')) : 0;
+          const idNum = pig.pig_id
+            ? Number.parseInt(pig.pig_id.replace(`${prefix}-`, ""))
+            : 0;
           return idNum;
         })
         .filter((id: number) => !isNaN(id));
@@ -42,7 +44,7 @@ export function generatePigId(farmId: string): string {
   while (existingIds.includes(nextId)) {
     nextId++;
   }
-  return `${prefix}-${nextId.toString().padStart(3, '0')}`;
+  return `${prefix}-${nextId.toString().padStart(3, "0")}`;
 }
 
 // Generate pig names for large scale operations
@@ -53,34 +55,42 @@ export function generatePigName(id: string): string {
 
 // Calculate age in months
 export function calculateAge(birth_date: string): number {
-  const birth = new Date(birth_date)
-  const now = new Date()
-  const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
-  return months
+  const birth = new Date(birth_date);
+  const now = new Date();
+  const months =
+    (now.getFullYear() - birth.getFullYear()) * 12 +
+    (now.getMonth() - birth.getMonth());
+  return months;
 }
 
 // Format date for display
 export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString()
+  return new Date(dateString).toLocaleDateString();
 }
 
 // Check if pig is ready for breeding
 export function isBreedingReady(pig: any): boolean {
-  const ageInMonths = calculateAge(pig.birth_date)
+  const ageInMonths = calculateAge(pig.birth_date);
   if (pig.gender === "female") {
-    return ageInMonths >= 6 && !pig.is_pregnant
+    return ageInMonths >= 6 && !pig.is_pregnant;
   } else {
-    return ageInMonths >= 6
+    return ageInMonths >= 6;
   }
 }
-const normalizeUrl = (url: any) => url.replace(/\/$/, '');
+const normalizeUrl = (url: any) => url.replace(/\/$/, "");
 
-export const baseUrl = process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:5000";
+export const baseUrl =
+  process.env.NODE_ENV === "production"
+    ? process.env.NEXT_PUBLIC_API_URL
+    : "http://localhost:5000";
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const parseTrialPeriod = () => {
-  const parsed = Number.parseInt(process.env.NEXT_PUBLIC_TRIAL_PERIOD ?? process.env.TRIAL_PERIOD ?? "30", 10);
+  const parsed = Number.parseInt(
+    process.env.NEXT_PUBLIC_TRIAL_PERIOD ?? process.env.TRIAL_PERIOD ?? "30",
+    10
+  );
   return Number.isNaN(parsed) ? 30 : Math.max(parsed, 1);
 };
 
@@ -117,11 +127,16 @@ export const getFarmTrialInfo = (): TrialInfo => {
     if (Number.isNaN(createdDate.getTime())) {
       return defaultTrialInfo;
     }
-    const trialEndDate = new Date(createdDate.getTime() + TRIAL_PERIOD_DAYS * DAY_IN_MS);
+    const trialEndDate = new Date(
+      createdDate.getTime() + TRIAL_PERIOD_DAYS * DAY_IN_MS
+    );
     const now = new Date();
     const isTrialActive = now.getTime() <= trialEndDate.getTime();
     const trialDaysLeft = isTrialActive
-      ? Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / DAY_IN_MS))
+      ? Math.max(
+          0,
+          Math.ceil((trialEndDate.getTime() - now.getTime()) / DAY_IN_MS)
+        )
       : 0;
 
     return {
@@ -145,7 +160,10 @@ export function formatPigCount(sows: number, boars: number): string {
   return sowText || boarText;
 }
 
-export const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
+export const getCurrentLocation = (): Promise<{
+  latitude: number;
+  longitude: number;
+}> => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Geolocation is not supported by your browser."));
@@ -153,13 +171,13 @@ export const getCurrentLocation = (): Promise<{ latitude: number; longitude: num
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      position => {
         resolve({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         });
       },
-      (error) => {
+      error => {
         switch (error.code) {
           case error.PERMISSION_DENIED:
             reject(new Error("Permission to access location was denied."));
@@ -171,7 +189,9 @@ export const getCurrentLocation = (): Promise<{ latitude: number; longitude: num
             reject(new Error("The request to get location timed out."));
             break;
           default:
-            reject(new Error("An unknown error occurred while fetching location."));
+            reject(
+              new Error("An unknown error occurred while fetching location.")
+            );
             break;
         }
       }
@@ -179,14 +199,21 @@ export const getCurrentLocation = (): Promise<{ latitude: number; longitude: num
   });
 };
 
-export const getAddressFromCoordinates = async (latitude: number, longitude: number): Promise<string> => {
+export const getAddressFromCoordinates = async (
+  latitude: number,
+  longitude: number
+): Promise<string> => {
   try {
     const response = await axios.get(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
     );
-    const suburb = response.data.address.suburb || response.data.address.city || response.data.address.town;
+    const suburb =
+      response.data.address.suburb ||
+      response.data.address.city ||
+      response.data.address.town;
     const state = response.data.address.state || response.data.address.region;
-    const country = response.data.address.country || response.data.address.country_code;
+    const country =
+      response.data.address.country || response.data.address.country_code;
     return `${suburb} - ${state}, ${country}` || "Address not found";
   } catch (error) {
     throw new Error("Failed to fetch address from coordinates.");
@@ -213,27 +240,32 @@ export const calculateAgeInMonths = (birthDate: string | undefined): number => {
 };
 
 // Check if pig is mature for breeding
-export const isPigMature = (pig: { birth_date?: string }): { isMature: boolean; reason: string } => {
+export const isPigMature = (pig: {
+  birth_date?: string;
+}): { isMature: boolean; reason: string } => {
   if (!pig.birth_date) {
     return { isMature: false, reason: "Birth date not available" };
   }
   const ageInMonths = calculateAgeInMonths(pig.birth_date);
   return ageInMonths >= MIN_BREEDING_AGE_MONTHS
     ? { isMature: true, reason: "Pig is mature" }
-    : { isMature: false, reason: `Pig is too young (${Math.round(ageInMonths)} months)` };
+    : {
+        isMature: false,
+        reason: `Pig is too young (${Math.round(ageInMonths)} months)`,
+      };
 };
 
 export const generateAlerts = (
   pigs: Pig[],
   setAlerts: (alerts: Alert[]) => void,
   setOverduePigs: (pigs: Pig[]) => void,
-  notifiedPigsRef: React.MutableRefObject<Set<string>>,
+  notifiedPigsRef: React.MutableRefObject<Set<string>>
 ): void => {
   const currentDate = new Date();
   const alertsList: Alert[] = [];
   const overduePigsList: Pig[] = [];
 
-  pigs.forEach((pig) => {
+  pigs.forEach(pig => {
     // Skip immature female pigs for pregnancy-related alerts
     const maturity = isPigMature(pig);
     if (!maturity.isMature && pig.gender === "female") {
@@ -247,7 +279,10 @@ export const generateAlerts = (
       try {
         pregnancyStart = new Date(pig.pregnancy_start_date);
         if (isNaN(pregnancyStart.getTime())) {
-          console.error(`Invalid pregnancy_start_date for ${pig.name}:`, pig.pregnancy_start_date);
+          console.error(
+            `Invalid pregnancy_start_date for ${pig.name}:`,
+            pig.pregnancy_start_date
+          );
           pregnancyStart = currentDate;
         }
       } catch (e) {
@@ -257,20 +292,30 @@ export const generateAlerts = (
       const timeDiff = currentDate.getTime() - pregnancyStart.getTime();
       const daysSincePregnancy = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
 
-      if (daysSincePregnancy >= 0 && daysSincePregnancy < (NESTING_BOX_START_DAYS || 110)) {
+      if (
+        daysSincePregnancy >= 0 &&
+        daysSincePregnancy < (NESTING_BOX_START_DAYS || 110)
+      ) {
         alertsList.push({
           type: "Pregnancy Noticed",
-          message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Confirmed pregnant since ${pregnancyStart.toLocaleDateString()}`,
+          message: `${pig.name} (${
+            pig.pen_id || "N/A"
+          }) - Confirmed pregnant since ${pregnancyStart.toLocaleDateString()}`,
           variant: "secondary",
         });
       }
 
       // --- Nesting Box Needed Alert ---
       // Reminds to add a nesting box when pregnancy reaches days 110-112
-      if (daysSincePregnancy >= (NESTING_BOX_START_DAYS || 110) && daysSincePregnancy < (NESTING_BOX_END_DAYS || 112)) {
+      if (
+        daysSincePregnancy >= (NESTING_BOX_START_DAYS || 110) &&
+        daysSincePregnancy < (NESTING_BOX_END_DAYS || 112)
+      ) {
         alertsList.push({
           type: "Nesting Box Needed",
-          message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Add nesting box, ${daysSincePregnancy} days since mating`,
+          message: `${pig.name} (${
+            pig.pen_id || "N/A"
+          }) - Add nesting box, ${daysSincePregnancy} days since mating`,
           variant: "secondary",
         });
       }
@@ -281,37 +326,59 @@ export const generateAlerts = (
         let expectedDate;
         try {
           expectedDate = new Date(pig.expected_birth_date);
-          if (isNaN(expectedDate.getTime())) throw new Error("Invalid expected_birth_date");
+          if (isNaN(expectedDate.getTime()))
+            throw new Error("Invalid expected_birth_date");
         } catch (e) {
-          console.error(`Invalid expected_birth_date for ${pig.name}:`, pig.expected_birth_date);
-          expectedDate = new Date(currentDate.getTime() + (PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000);
+          console.error(
+            `Invalid expected_birth_date for ${pig.name}:`,
+            pig.expected_birth_date
+          );
+          expectedDate = new Date(
+            currentDate.getTime() +
+              (PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000
+          );
         }
-        const daysToBirth = Math.ceil((expectedDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+        const daysToBirth = Math.ceil(
+          (expectedDate.getTime() - currentDate.getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
         if (daysSincePregnancy >= 110 && daysSincePregnancy <= 114) {
           alertsList.push({
             type: "Birth Expected",
-            message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Expected to give birth ${daysToBirth === 0 ? "today" : daysToBirth > 0 ? `in ${daysToBirth} days` : `overdue by ${Math.abs(daysToBirth)} days`}`,
+            message: `${pig.name} (${
+              pig.pen_id || "N/A"
+            }) - Expected to give birth ${
+              daysToBirth === 0
+                ? "today"
+                : daysToBirth > 0
+                ? `in ${daysToBirth} days`
+                : `overdue by ${Math.abs(daysToBirth)} days`
+            }`,
             variant: daysToBirth <= 0 ? "destructive" : "secondary",
           });
         }
 
         // --- Overdue Birth Toast Notification ---
         // Shows a toast when expected birth date is exceeded (overdue)
-        if (daysToBirth < 0 && !notifiedPigsRef.current.has(pig.pig_id ?? '')) {
+        if (daysToBirth < 0 && !notifiedPigsRef.current.has(pig.pig_id ?? "")) {
           overduePigsList.push(pig);
         }
       }
     }
 
     // --- Fostering Needed Alert ---
-    // Suggests fostering kits 20 days after birth
+    // Suggests fostering piglets 20 days after birth
     if (pig.actual_birth_date) {
       let birthDate;
       try {
         birthDate = new Date(pig.actual_birth_date);
-        if (isNaN(birthDate.getTime())) throw new Error("Invalid actual_birth_date");
+        if (isNaN(birthDate.getTime()))
+          throw new Error("Invalid actual_birth_date");
       } catch (e) {
-        console.error(`Invalid actual_birth_date for ${pig.name}:`, pig.actual_birth_date);
+        console.error(
+          `Invalid actual_birth_date for ${pig.name}:`,
+          pig.actual_birth_date
+        );
         birthDate = currentDate;
       }
       const timeDiff = currentDate.getTime() - birthDate.getTime();
@@ -320,17 +387,21 @@ export const generateAlerts = (
       if (daysSinceBirth === (FOSTERING_DAYS_AFTER_BIRTH || 20)) {
         alertsList.push({
           type: "Fostering Needed",
-          message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Consider fostering kits to other sows`,
+          message: `${pig.name} (${
+            pig.pen_id || "N/A"
+          }) - Consider fostering piglets to other sows`,
           variant: "secondary",
         });
       }
 
       // --- Weaning and Nesting Box Removal Alert ---
-      // Reminds to wean kits and remove nesting box 42 days after birth
+      // Reminds to wean piglets and remove nesting box 42 days after birth
       if (daysSinceBirth === (WEANING_PERIOD_DAYS || 42)) {
         alertsList.push({
           type: "Weaning and Nesting Box Removal",
-          message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Wean kits and move to new hutches, remove nesting box`,
+          message: `${pig.name} (${
+            pig.pen_id || "N/A"
+          }) - Wean piglets and move to new pens, remove nesting box`,
           variant: "secondary",
         });
       }
@@ -339,22 +410,39 @@ export const generateAlerts = (
     // --- Breeding Ready Alert ---
     // Notifies when a mature sow is ready for the next breeding cycle
     if (pig.gender === "female" && !pig.is_pregnant && maturity.isMature) {
-      const lastBirth = pig.actual_birth_date ? new Date(pig.actual_birth_date) : null;
+      const lastBirth = pig.actual_birth_date
+        ? new Date(pig.actual_birth_date)
+        : null;
       const weaningDate = lastBirth
-        ? new Date(lastBirth.getTime() + (WEANING_PERIOD_DAYS || 42) * 24 * 60 * 60 * 1000)
+        ? new Date(
+            lastBirth.getTime() +
+              (WEANING_PERIOD_DAYS || 42) * 24 * 60 * 60 * 1000
+          )
         : null;
       const oneWeekAfterWeaning = weaningDate
-        ? new Date(weaningDate.getTime() + (POST_WEANING_BREEDING_DELAY_DAYS || 7) * 24 * 60 * 60 * 1000)
+        ? new Date(
+            weaningDate.getTime() +
+              (POST_WEANING_BREEDING_DELAY_DAYS || 7) * 24 * 60 * 60 * 1000
+          )
         : null;
       if (
         (!pig.pregnancy_start_date ||
           (pig.pregnancy_start_date &&
-            currentDate.getTime() > new Date(pig.pregnancy_start_date).getTime() + ((PREGNANCY_DURATION_DAYS || 114) + (WEANING_PERIOD_DAYS || 42)) * 24 * 60 * 60 * 1000)) &&
+            currentDate.getTime() >
+              new Date(pig.pregnancy_start_date).getTime() +
+                ((PREGNANCY_DURATION_DAYS || 114) +
+                  (WEANING_PERIOD_DAYS || 42)) *
+                  24 *
+                  60 *
+                  60 *
+                  1000)) &&
         (!oneWeekAfterWeaning || currentDate > oneWeekAfterWeaning)
       ) {
         alertsList.push({
           type: "Breeding Ready",
-          message: `${pig.name} (${pig.hutch_id || 'N/A'}) - Ready for next breeding cycle`,
+          message: `${pig.name} (${
+            pig.pen_id || "N/A"
+          }) - Ready for next breeding cycle`,
           variant: "outline",
         });
       }
@@ -368,7 +456,7 @@ export const generateAlerts = (
     //   if (daysDiff <= 0) {
     //     alertsList.push({
     //       type: "Medication Due",
-    //       message: `${pig.name} (${pig.hutch_id}) - Vaccination overdue by ${Math.abs(daysDiff)} days`,
+    //       message: `${pig.name} (${pig.pen_id}) - Vaccination overdue by ${Math.abs(daysDiff)} days`,
     //       variant: "destructive",
     //     });
     //   }
@@ -395,26 +483,20 @@ export const getPigDynamicFarmName = () => {
   }
 };
 
-export function hutchNamesConversion(
-  hutches: Hutch[],
-  message: string
-): string {
-  
-  const hutchIdPattern =
+export function penNamesConversion(pens: Pen[], message: string): string {
+  const penIdPattern =
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
-  const match = message.match(hutchIdPattern);
+  const match = message.match(penIdPattern);
 
   if (match) {
-    const hutchId = match[0];
-    
-    const matchingHutch = hutches.find(hutch => hutch.id === hutchId);
+    const penId = match[0];
 
-    if (matchingHutch) {
-  
-      return message.replace(hutchId, matchingHutch.name);
+    const matchingPen = pens.find(pen => pen.id === penId);
+
+    if (matchingPen) {
+      return message.replace(penId, matchingPen.name);
     }
   }
-
 
   return message;
 }

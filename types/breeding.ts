@@ -1,4 +1,4 @@
-import { Hutch } from "./hutches";
+import { Pen } from "./pens";
 import { Pig } from "./pigs";
 
 export interface BreedingRecord {
@@ -13,13 +13,13 @@ export interface BreedingRecord {
   expected_birth_date?: string;
   notes?: string;
   actualBirthDate?: string;
-  numberOfKits?: number;
+  numberOfPiglets?: number;
 }
 
 export interface BreedingManagerProps {
   pigs: Pig[];
   onPigsUpdate: (updatedPigs: Pig[]) => void;
-  hutches: Hutch[];
+  pens: Pen[];
 }
 
 export interface CompatibilityResult {

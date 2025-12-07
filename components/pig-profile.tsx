@@ -34,7 +34,7 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
         setLoading(false);
         return;
       }
-      if (pig && pig.name && pig.breed && pig.hutch_name) {
+      if (pig && pig.name && pig.breed && pig.pen_name) {
         setPigData(pig);
         setLoading(false);
         return;
@@ -153,8 +153,8 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">Hutch:</span>
-                    <span className="text-gray-700 dark:text-gray-300">{pigData.hutch_name}</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">Pen:</span>
+                    <span className="text-gray-700 dark:text-gray-300">{pigData.pen_name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-medium text-gray-900 dark:text-gray-100">Breed:</span>
@@ -238,8 +238,8 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
                     <span className="text-gray-700 dark:text-gray-300">{pigData.total_litters || 0}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">Total Kits:</span>
-                    <span className="text-gray-700 dark:text-gray-300">{pigData.total_kits || 0}</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">Total Piglets:</span>
+                    <span className="text-gray-700 dark:text-gray-300">{pigData.total_piglets || 0}</span>
                   </div>
                   {pigData.parent_male_id && (
                     <div className="flex justify-between">

@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context";
 import axios from "axios";
 import * as utils from "@/lib/utils";
 import FarmCreationModal from "@/components/farm-creation-modal";
-import type { Row, Hutch } from "@/types";
+import type { Row, Pen } from "@/types";
 import { AddRowDialogProps } from "@/types";
 import { planetNames } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
@@ -27,7 +27,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   });
   const [customCapacity, setCustomCapacity] = useState("");
   const [existingRows, setExistingRows] = useState<Row[]>([]);
-  const [existingHutches, setExistingHutches] = useState<Hutch[]>([]);
+  const [existingPens, setExistingPens] = useState<Pen[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { showSuccess, showError, showWarn } = useToast();
@@ -36,14 +36,14 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   const loadFromStorage = (farmId: string) => {
     try {
       const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`);
-      const cachedHutches = localStorage.getItem(`pig_farm_hutches_${farmId}`);
+      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`);
       return {
         rows: cachedRows ? JSON.parse(cachedRows) : [],
-        hutches: cachedHutches ? JSON.parse(cachedHutches) : [],
+        pens: cachedPens ? JSON.parse(cachedPens) : [],
       };
     } catch (error) {
       showError('Error', 'Failed to load cached data.');
-      return { rows: [], hutches: [] };
+      return { rows: [], pens: [] };
     }
   };
   const getValidLevels = (capacity: number) => {
@@ -52,10 +52,10 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   };
 
 
-  const saveToStorage = (farmId: string, data: { rows: Row[]; hutches: Hutch[] }) => {
+  const saveToStorage = (farmId: string, data: { rows: Row[]; pens: Pen[] }) => {
     try {
       localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows));
-      localStorage.setItem(`pig_farm_hutches_${farmId}`, JSON.stringify(data.hutches));
+      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens));
     } catch (error) {
       showError('Error', "Failed to save data to storage.");
     }
@@ -81,9 +81,9 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
     }
 
     const cachedData = loadFromStorage(user.farm_id);
-    if (cachedData.rows.length || cachedData.hutches.length) {
+    if (cachedData.rows.length || cachedData.pens.length) {
       setExistingRows(cachedData.rows);
-      setExistingHutches(cachedData.hutches);
+      setExistingPens(cachedData.pens);
     }
 
     const fetchData = async () => {
@@ -91,24 +91,24 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         const token = localStorage.getItem("pig_farm_token");
         if (!token) throw new Error("Authentication token missing");
 
-        const [rowsResponse, hutchesResponse] = await Promise.all([
+        const [rowsResponse, pensResponse] = await Promise.all([
           axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          axios.get(`${utils.apiUrl}/hutches/${user.farm_id}`, {
+          axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
         const newRows: Row[] = rowsResponse.data.data || [];
-        const newHutches: Hutch[] = hutchesResponse.data.data || [];
+        const newPens: Pen[] = pensResponse.data.data || [];
         setExistingRows(newRows);
-        setExistingHutches(newHutches);
-        saveToStorage(user.farm_id ?? '', { rows: newRows, hutches: newHutches });
+        setExistingPens(newPens);
+        saveToStorage(user.farm_id ?? '', { rows: newRows, pens: newPens });
       } catch (error) {
-        showError('Error', "Failed to fetch rows or hutches. Using cached data.");
-        if (cachedData.rows.length || cachedData.hutches.length) {
+        showError('Error', "Failed to fetch rows or pens. Using cached data.");
+        if (cachedData.rows.length || cachedData.pens.length) {
           setExistingRows(cachedData.rows);
-          setExistingHutches(cachedData.hutches);
+          setExistingPens(cachedData.pens);
         }
       }
     };
@@ -125,26 +125,26 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
     return Array.from({ length: numLevels }, (_, i) => String.fromCharCode(65 + i));
   };
 
-  // const distributeHutches = (capacity: number, numLevels: number) => {
+  // const distributePens = (capacity: number, numLevels: number) => {
   //   const levels = generateLevels(numLevels);
-  //   const baseHutchesPerLevel = Math.floor(capacity / numLevels);
+  //   const basePensPerLevel = Math.floor(capacity / numLevels);
   //   const remainder = capacity % numLevels;
   //   const distribution: { [key: string]: number } = {};
 
   //   levels.forEach((level, index) => {
-  //     distribution[level] = baseHutchesPerLevel + (index < remainder ? 1 : 0);
+  //     distribution[level] = basePensPerLevel + (index < remainder ? 1 : 0);
   //   });
 
   //   return distribution;
   // };
 
-  const distributeHutches = (capacity: number, numLevels: number) => {
+  const distributePens = (capacity: number, numLevels: number) => {
     const levels = generateLevels(numLevels);
-    const hutchesPerLevel = capacity / numLevels; // This will now always be an integer due to validation
+    const pensPerLevel = capacity / numLevels; // This will now always be an integer due to validation
     const distribution: { [key: string]: number } = {};
 
     levels.forEach(level => {
-      distribution[level] = hutchesPerLevel;
+      distribution[level] = pensPerLevel;
     });
 
     return distribution;
@@ -201,7 +201,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         // Edit mode: Update existing row
         const updatedRow: Partial<Row> = {
           name: newRowName,
-          description: formData.description || `${newRowName} row with ${capacity} hutches across ${numLevels} levels`,
+          description: formData.description || `${newRowName} row with ${capacity} pens across ${numLevels} levels`,
           capacity,
           levels: generateLevels(numLevels),
         };
@@ -216,17 +216,17 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
           throw new Error(response.data.message || "Failed to update row");
         }
 
-        // Update hutches if capacity or levels changed
-        const currentHutches = existingHutches.filter(h => h.row_name === rowToEdit.name);
-        const newDistribution = distributeHutches(capacity, numLevels);
-        const newHutches: Hutch[] = [];
+        // Update pens if capacity or levels changed
+        const currentPens = existingPens.filter(h => h.row_name === rowToEdit.name);
+        const newDistribution = distributePens(capacity, numLevels);
+        const newPens: Pen[] = [];
         for (const [level, count] of Object.entries(newDistribution)) {
           for (let position = 1; position <= count; position++) {
-            const hutch_id = `${newRowName}-${level}${position}`;
-            const existingHutch = currentHutches.find(h => h.level === level && h.position === position);
-            if (!existingHutch) {
-              newHutches.push({
-                id: hutch_id,
+            const pen_id = `${newRowName}-${level}${position}`;
+            const existingPen = currentPens.find(h => h.level === level && h.position === position);
+            if (!existingPen) {
+              newPens.push({
+                id: pen_id,
                 farm_id: user.farm_id,
                 row_name: newRowName,
                 row_id: rowToEdit.id ?? '',
@@ -248,14 +248,14 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
 
         // Update local storage
         const updatedRows = existingRows.map(r => r.id === rowToEdit.id ? { ...r, ...updatedRow } : r);
-        const updatedHutches = [
-          ...existingHutches.filter(h => h.row_name !== rowToEdit.name),
-          ...currentHutches.filter(h => newDistribution[h.level] >= h.position),
-          ...newHutches
+        const updatedPens = [
+          ...existingPens.filter(h => h.row_name !== rowToEdit.name),
+          ...currentPens.filter(h => newDistribution[h.level] >= h.position),
+          ...newPens
         ];
-        saveToStorage(user.farm_id, { rows: updatedRows, hutches: updatedHutches });
+        saveToStorage(user.farm_id, { rows: updatedRows, pens: updatedPens });
         setExistingRows(updatedRows);
-        setExistingHutches(updatedHutches);
+        setExistingPens(updatedPens);
 
         showSuccess("Success", `Row "${newRowName}" updated successfully!`)
       } else {
@@ -269,7 +269,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         const newRow: Row = {
           name: newRowName,
           farm_id: user.farm_id,
-          description: formData.description || `${newRowName} row with ${capacity} hutches across ${numLevels} levels`,
+          description: formData.description || `${newRowName} row with ${capacity} pens across ${numLevels} levels`,
           capacity,
           levels: generateLevels(numLevels),
           is_deleted: 0,
@@ -281,16 +281,16 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         });
 
         if (!response.data.success) {
-        showError('Error', response.data.message || "Failed to create row")
+          showError('Error', response.data.message || "Failed to create row")
         }
-        const newHutches: Hutch[] = response?.data?.data?.hutches ?? [];
+        const newPens: Pen[] = response?.data?.data?.pens ?? [];
         const updatedRows = [...existingRows, response?.data?.data?.rows];
-        const updatedHutches = [...existingHutches, ...newHutches];
-        saveToStorage(user.farm_id, { rows: updatedRows, hutches: updatedHutches });
+        const updatedPens = [...existingPens, ...newPens];
+        saveToStorage(user.farm_id, { rows: updatedRows, pens: updatedPens });
         setExistingRows(updatedRows);
-        setExistingHutches(updatedHutches);
-        showSuccess('Success', `Successfully created row "${newRowName}" with ${capacity} hutches across ${numLevels} levels!`);
-    }
+        setExistingPens(updatedPens);
+        showSuccess('Success', `Successfully created row "${newRowName}" with ${capacity} pens across ${numLevels} levels!`);
+      }
 
       setFormData({ name: "", description: "", capacity: "6", levels: "3" });
       setCustomCapacity("");
@@ -323,7 +323,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
 
   return (
     <>
-      <Dialog 
+      <Dialog
         open={open}
         onOpenChange={(isOpen) => {
           onClose();
@@ -387,7 +387,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                 <SelectContent>
                   {[6, 8, 12, 15, 18, 24, 30, 36, 42, 48, 54, 60, 72].map(cap => (
                     <SelectItem key={cap} value={cap.toString()}>
-                      {cap} Hutches
+                      {cap} Pens
                     </SelectItem>
                   ))}
                   <SelectItem value="other">Other</SelectItem>
@@ -470,8 +470,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                   · {formData.levels} Levels (
                   {generateLevels(parseInt(formData.levels)).join(", ")})
                 </li>
-                <li>· {effectiveCapacity || "N/A"} Total Hutches</li>
-                <li>· Each hutch includes water bottle and feeder</li>
+                <li>· {effectiveCapacity || "N/A"} Total Pens</li>
+                <li>· Each pen includes water bottle and feeder</li>
               </ul>
             </div>
             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border-green-200 dark:border-green-800">
@@ -479,8 +479,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                 Current Status
               </h4>
               <p className="text-sm text-green-700 dark:text-green-500">
-                Existing rows: {existingRows.length} | Total hutches:{" "}
-                {existingHutches.length}
+                Existing rows: {existingRows.length} | Total pens:{" "}
+                {existingPens.length}
               </p>
               {/* <p className="text-sm text-green-700 dark:text-green-500 mt-1">
                 Next row will be: <strong>{getNextPlanetName()}</strong>
@@ -506,7 +506,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                 disabled={isSubmitting}
                 className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white"
               >
-                {isSubmitting ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Row" : "Create Row & Hutches")}
+                {isSubmitting ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Row" : "Create Row & Pens")}
               </Button>
             </DialogFooter>
           </form>

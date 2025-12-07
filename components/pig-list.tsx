@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
 import type { PigListProps, Pig as PigType } from "@/types";
 import EditPigDialog from "@/components/edit-pig-dialog";
-import AddKitDialog from "@/components/add-kit-dialog";
+import AddPigletDialog from "@/components/add-piglet-dialog";
 import RemovePigDialog from "@/components/remove-pig-dialog";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -35,7 +35,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [selectedPigs, setSelectedPigs] = useState<string[]>([]);
   const [editingPig, setEditingPig] = useState<PigType | null>(null);
-  const [addKitPig, setAddKitPig] = useState<PigType | null>(null);
+  const [addPigletPig, setAddPigletPig] = useState<PigType | null>(null);
   const [removingPig, setRemovingPig] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,13 +143,13 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
     setEditingPig(pig);
   }, []);
 
-  const handleAddKit = useCallback(
+  const handleAddPiglet = useCallback(
     (pig: PigType) => {
       if (!pig.is_pregnant) {
-        showError("Error", "Cannot add kit records because the pig has not been pregnant.")
+        showError("Error", "Cannot add piglet records because the pig has not been pregnant.")
         return
       }
-      setAddKitPig(pig)
+      setAddPigletPig(pig)
     },
     [showError],
   )
@@ -160,7 +160,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       id: pig.id,
       pig_id: pig.pig_id || "",
       name: pig.name || "Unnamed",
-      hutch_id: pig.hutch_id,
+      pen_id: pig.pen_id,
       gender: pig.gender || "unknown",
       breed: pig.breed || "Unknown",
       weight: pig.weight || 0,
@@ -264,9 +264,9 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       className: "hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400",
     },
     {
-      label: "Add Kit",
+      label: "Add Piglet",
       icon: Plus,
-      onClick: handleAddKit,
+      onClick: handleAddPiglet,
       condition: (row: PigType) => row.gender !== "male",
       className: "hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 dark:text-green-400",
     },
@@ -338,7 +338,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
                 <PiggyBank className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Pig Colony</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Pig Herd</h1>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                   Manage your pig farm efficiently
                 </p>
@@ -505,15 +505,15 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
           }}
         />
       )}
-      {addKitPig && (
-        <AddKitDialog
-          pig={addKitPig}
-          sowId={addKitPig.pig_id ?? ""}
+      {addPigletPig && (
+        <AddPigletDialog
+          pig={addPigletPig}
+          sowId={addPigletPig.pig_id ?? ""}
           boarId=""
-          sowName={addKitPig.name}
-          onClose={() => setAddKitPig(null)}
-          onKitAdded={() => {
-            setAddKitPig(null)
+          sowName={addPigletPig.name}
+          onClose={() => setAddPigletPig(null)}
+          onPigletAdded={() => {
+            setAddPigletPig(null)
             refetchPigs()
           }}
         />
@@ -521,8 +521,8 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
 
       {removingPig && (
         <RemovePigDialog
-          hutch_id={removingPig.hutch_id}
-          hutch_name={`Hutch ${removingPig.hutch_id}`}
+          pen_id={removingPig.pen_id}
+          pen_name={`Pen ${removingPig.pen_id}`}
           pig={removingPig}
           onClose={() => setRemovingPig(null)}
           onRemovalSuccess={() => {
@@ -533,8 +533,8 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       )}
       {addPigOpen && (
         <AddPigDialog
-          customHutches={true}
-          hutch_id={""}
+          customPens={true}
+          pen_id={""}
           onClose={() => setAddPigOpen(false)}
           onPigAdded={(newPig) => {
             setAddPigOpen(false)

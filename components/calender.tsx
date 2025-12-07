@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import { hutchNamesConversion } from "@/lib/utils";
+import { penNamesConversion } from "@/lib/utils";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -32,12 +32,12 @@ interface CalendarProps {
   events?: CalendarEvent[];
   onDateClick?: (date: string) => void;
   onEventClick?: (event: CalendarEvent) => void;
-  hutches?: any[]
+  pens?: any[]
 }
 
 export default function Calendar({
   events = [],
-  hutches = [],
+  pens = [],
   onDateClick,
   onEventClick,
 }: CalendarProps) {
@@ -291,7 +291,7 @@ export default function Calendar({
                               </div>
                               {event.description && (
                                 <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 break-words">
-                                  {hutchNamesConversion(hutches, event.description)}
+                                  {penNamesConversion(pens, event.description)}
                                 </p>
                               )}
                             </div>
@@ -334,7 +334,7 @@ export default function Calendar({
                               </div>
                               {event.description && (
                                 <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 break-words">
-                                  {hutchNamesConversion(hutches, event.description)}
+                                  {penNamesConversion(pens, event.description)}
                                 </p>
                               )}
                             </div>

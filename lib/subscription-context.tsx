@@ -3,7 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react";
 import { roles } from "./constants";
-import { useAuth } from "./auth-context"; 
+import { useAuth } from "./auth-context";
 import { getFarmTrialInfo, type TrialInfo } from "./utils";
 
 type SubscriptionTier = "free" | "standard" | "advanced" | "admin" | "superadmin"
@@ -30,13 +30,13 @@ interface SubscriptionContextType {
 const subscriptionLimits: Record<SubscriptionTier, SubscriptionLimits> = {
     free: {
         maxRows: 3,
-        maxPigs: 54, // 3 rows * 18 hutches
+        maxPigs: 54, // 3 rows * 18 pens
         maxUsers: 1,
         maxReports: 5,
     },
     standard: {
         maxRows: 10,
-        maxPigs: 180, // 10 rows * 18 hutches
+        maxPigs: 180, // 10 rows * 18 pens
         maxUsers: 3,
         maxReports: 50,
     },
@@ -63,40 +63,40 @@ const subscriptionLimits: Record<SubscriptionTier, SubscriptionLimits> = {
 const featureMatrix: Record<SubscriptionTier, string[]> = {
     free: [
         "basic_analytics", "basic_reports", "record_keeping",
-        "overview", "hutches", "breeding"
+        "overview", "pens", "breeding"
     ],
     standard: [
         "basic_analytics", "enhanced_analytics", "basic_reports", "export_reports",
         "email_notifications", "user_management", "weekly_reports",
-        "overview", "hutches", "breeding", "health", "feeding", "earnings"
+        "overview", "pens", "breeding", "health", "feeding", "earnings"
     ],
     advanced: [
         "basic_analytics", "enhanced_analytics", "advanced_analytics",
         "basic_reports", "export_reports", "email_notifications", "sms_notifications",
         "user_management", "calendar_integration", "weekly_reports", "monthly_reports",
         "automated_backups", "priority_support",
-        "overview", "hutches", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
+        "overview", "pens", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
     ],
     admin: [
         "basic_analytics", "enhanced_analytics", "advanced_analytics",
         "basic_reports", "export_reports", "email_notifications", "sms_notifications",
         "user_management", "calendar_integration", "weekly_reports", "monthly_reports",
         "automated_backups", "priority_support",
-        "overview", "hutches", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
+        "overview", "pens", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
     ],
     superadmin: [
         "basic_analytics", "enhanced_analytics", "advanced_analytics",
         "basic_reports", "export_reports", "email_notifications", "sms_notifications",
         "user_management", "calendar_integration", "weekly_reports", "monthly_reports",
         "automated_backups", "priority_support",
-        "overview", "hutches", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
+        "overview", "pens", "breeding", "health", "feeding", "earnings", "reports", "analytics", "calender"
     ],
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined)
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-    const { user } = useAuth(); 
+    const { user } = useAuth();
     const [tier, setTier] = useState<SubscriptionTier>("free");
     const [trialInfo, setTrialInfo] = useState<TrialInfo>({
         isTrialActive: false,

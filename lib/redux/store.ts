@@ -1,17 +1,17 @@
 import { configureStore } from "@reduxjs/toolkit";
-import kitsReducer from "../reducers/kits/kitsSlice";
+import pigletsReducer from "../reducers/piglets/pigletsSlice";
 
 export const store = configureStore({
   reducer: {
-    kits: kitsReducer,
+    piglets: pigletsReducer,
   },
-  middleware: (getDefaultMiddleware) =>
+  middleware: getDefaultMiddleware =>
     getDefaultMiddleware({
       serializableCheck: {
         ignoredActions: ["persist/PERSIST", "persist/REHYDRATE"],
       },
     }),
-})
+});
 
-export type RootState = ReturnType<typeof store.getState>
-export type AppDispatch = typeof store.dispatch
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;

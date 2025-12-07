@@ -1,5 +1,5 @@
-import { Hutch } from "./hutches";
+import { Pen } from "./pens";
 
 export interface ReportsProps {
-  hutches: Hutch[];
+  pens: Pen[];
 }

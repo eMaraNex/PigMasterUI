@@ -21,7 +21,7 @@ const checkInbreeding = (sow: Pig, boar: Pig): boolean => {
   return false;
 };
 
-export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutches }: BreedingManagerProps) {
+export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens }: BreedingManagerProps) {
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
   const [selectedSow, setSelectedSow] = useState<string>("");
@@ -55,12 +55,12 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutch
 
     const sowMaturity = utils.isPigMature(sow);
     if (!sowMaturity.isMature) {
-      return { compatible: false, reason: `Sow ${sow.name} (${sow.hutch_id || 'N/A'}): ${sowMaturity.reason}` };
+      return { compatible: false, reason: `Sow ${sow.name} (${sow.pen_id || 'N/A'}): ${sowMaturity.reason}` };
     }
 
     const boarMaturity = utils.isPigMature(boar);
     if (!boarMaturity.isMature) {
-      return { compatible: false, reason: `Boar ${boar.name} (${boar.hutch_id || 'N/A'}): ${boarMaturity.reason}` };
+      return { compatible: false, reason: `Boar ${boar.name} (${boar.pen_id || 'N/A'}): ${boarMaturity.reason}` };
     }
 
     if (checkInbreeding(sow, boar)) {
@@ -263,7 +263,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutch
                 <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
                   {availableSows.map((sow) => (
                     <SelectItem key={sow.id} value={sow.id || ''}>
-                      {sow.name} ({sow.hutch_name || 'N/A'}) - {sow.breed} {!utils.isPigMature(sow).isMature ? '(Too Young)' : ''}
+                      {sow.name} ({sow.pen_name || 'N/A'}) - {sow.breed} {!utils.isPigMature(sow).isMature ? '(Too Young)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -281,7 +281,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutch
                 <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
                   {availableBoars.map((boar) => (
                     <SelectItem key={boar.id} value={boar.id || ''}>
-                      {boar.name} ({boar.hutch_name || 'N/A'}) - {boar.breed} {!utils.isPigMature(boar).isMature ? '(Too Young)' : ''}
+                      {boar.name} ({boar.pen_name || 'N/A'}) - {boar.breed} {!utils.isPigMature(boar).isMature ? '(Too Young)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -361,7 +361,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, hutch
                       {sow.name}
                     </h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Hutch {utils.hutchNamesConversion(hutches, sow.hutch_id ?? '') || "N/A"}
+                      Pen {utils.penNamesConversion(pens, sow.pen_id ?? '') || "N/A"}
                       {/* • Mated with {sow.mated_with} */}
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">

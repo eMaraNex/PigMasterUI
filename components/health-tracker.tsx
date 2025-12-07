@@ -14,9 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { HealthTrackerProps, Pig } from "@/types"
-import { hutchNamesConversion } from "@/lib/utils"
+import { penNamesConversion } from "@/lib/utils"
 
-export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
+export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const { user } = useAuth()
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
@@ -127,7 +127,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-3 sm:space-y-0">
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Hutch {pig.hutch_id}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Pen {pig.pen_id}</p>
                         <div className="mt-2 space-y-1">
                           {healthRecords
                             .filter(
@@ -152,10 +152,10 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                         size="sm"
                         variant="destructive"
                         className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 flex-shrink-0 w-full sm:w-auto"
-                        onClick={async()=>{
-                          try{
-                            if (!user?.farm_id) { showError('Error','Missing farm details'); return }
-                            const overdue = healthRecords.filter((record)=> record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
+                        onClick={async () => {
+                          try {
+                            if (!user?.farm_id) { showError('Error', 'Missing farm details'); return }
+                            const overdue = healthRecords.filter((record) => record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
                             const updatedRecords = [] as any[]
                             for (const r of overdue) {
                               const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
@@ -171,8 +171,8 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                               })
                               return { ...p, healthRecords: newRecords }
                             }))
-                            showSuccess('Success','Marked overdue record(s) as completed')
-                          }catch(err:any){
+                            showSuccess('Success', 'Marked overdue record(s) as completed')
+                          } catch (err: any) {
                             showError('Error', err?.response?.data?.message || err?.message)
                           }
                         }}
@@ -210,7 +210,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-3 sm:space-y-0">
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Hutch {pig.hutch_id}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Pen {pig.pen_id}</p>
                         <div className="mt-2 space-y-1">
                           {healthRecords
                             .filter((record) => {
@@ -228,10 +228,10 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                                 <span className="font-medium text-gray-900 dark:text-gray-100">{record.type}</span> -
                                 <span className="text-amber-600 dark:text-amber-400 ml-1">
                                   Due {new Date(record.nextDue!).toLocaleDateString()}
-                                  </span>
+                                </span>
                                 <div className="ml-2 flex items-center space-x-2">
-                                  <button onClick={async()=>{ try{ const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords||[]).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success','Record marked completed'); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
-                                  <button onClick={async()=>{ try{ const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords||[]).filter(r => r.id !== deleted.id) }))); showSuccess('Success','Record deleted'); } catch(err:any){ showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
+                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
+                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
                                 </div>
                               </div>
                             ))}
@@ -259,7 +259,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
         <CardHeader className="pb-3 sm:pb-4">
           <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
             <span className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">All Pigs Health Status</span>
-            <Dialog open={addOpen} onOpenChange={(v)=>setAddOpen(v)}>
+            <Dialog open={addOpen} onOpenChange={(v) => setAddOpen(v)}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white w-full sm:w-auto">
                   <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
@@ -270,7 +270,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                 <DialogHeader>
                   <DialogTitle>Add health record</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={async (e)=>{
+                <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
                   try {
@@ -278,28 +278,28 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                     const added = resp?.data?.data ?? resp?.data
                     // add record into localPigs
                     setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, healthRecords: [added, ...(p.healthRecords || [])] } : p))
-                    showSuccess('Success','Health record added')
+                    showSuccess('Success', 'Health record added')
                     setAddOpen(false)
-                  } catch(err:any){
+                  } catch (err: any) {
                     showError('Error', err?.response?.data?.message || err?.message)
                   }
                 }}>
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs font-medium">Pig</label>
-                      <Select value={form.pig_id} onValueChange={(v)=>setForm({...form,pig_id:v})}>
+                      <Select value={form.pig_id} onValueChange={(v) => setForm({ ...form, pig_id: v })}>
                         <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {localPigs?.map(p=> <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
+                          {localPigs?.map(p => <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
                       <label className="text-xs font-medium">Type</label>
-                      <Select value={form.type} onValueChange={(v)=>setForm({...form,type:v})}>
-                        <SelectTrigger className="w-full"><SelectValue/></SelectTrigger>
+                      <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="vaccination">Vaccination</SelectItem>
                           <SelectItem value="treatment">Treatment</SelectItem>
@@ -312,35 +312,35 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                     </div>
                     <div>
                       <label className="text-xs font-medium">Description</label>
-                      <Textarea value={form.description} onChange={(e)=>setForm({...form,description:e.target.value})} />
+                      <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs font-medium">Date</label>
-                        <Input type="date" value={form.date} onChange={(e)=>setForm({...form,date:e.target.value})} />
+                        <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
                       </div>
                       <div>
                         <label className="text-xs font-medium">Next due</label>
-                        <Input type="date" value={form.next_due} onChange={(e)=>setForm({...form,next_due:e.target.value})} />
+                        <Input type="date" value={form.next_due} onChange={(e) => setForm({ ...form, next_due: e.target.value })} />
                       </div>
                     </div>
                     <div>
                       <label className="text-xs font-medium">Veterinarian</label>
-                      <Input value={form.veterinarian} onChange={(e)=>setForm({...form,veterinarian:e.target.value})} />
+                      <Input value={form.veterinarian} onChange={(e) => setForm({ ...form, veterinarian: e.target.value })} />
                     </div>
                     <div>
                       <label className="text-xs font-medium">Notes</label>
-                      <Textarea value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})} />
+                      <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                     </div>
                     <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={()=>setAddOpen(false)}>Cancel</Button>
+                      <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
                       <Button type="submit">Add</Button>
                     </div>
                   </div>
                 </form>
               </DialogContent>
             </Dialog>
-              
+
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
@@ -356,7 +356,7 @@ export default function HealthTracker({ pigs, hutches }: HealthTrackerProps) {
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
                     <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      Hutch {hutchNamesConversion(hutches, pig.hutch_id ?? '')} • {pig.breed} • {pig.gender === "female" ? "Sow" : "Boar"}
+                      Pen {penNamesConversion(pens, pig.pen_id ?? '')} • {pig.breed} • {pig.gender === "female" ? "Sow" : "Boar"}
                     </p>
                     <div className="mt-1 sm:mt-2">
                       <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">

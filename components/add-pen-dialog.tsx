@@ -13,7 +13,7 @@ import axios from "axios"
 import * as utils from "@/lib/utils"
 import { useToast } from "@/lib/toast-provider"
 
-export default function AddHutchDialog() {
+export default function AddPenDialog() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState({
@@ -25,27 +25,27 @@ export default function AddHutchDialog() {
     features: "",
   })
   const [rows, setRows] = useState<any[]>([])
-  const [hutches, setHutches] = useState<any[]>([])
+  const [pens, setPens] = useState<any[]>([])
   const { showError, showWarn } = useToast();
 
   const loadFromStorage = (farmId: string) => {
     try {
       const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`)
-      const cachedHutches = localStorage.getItem(`pig_farm_hutches_${farmId}`)
+      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`)
       return {
         rows: cachedRows ? JSON.parse(cachedRows) : [],
-        hutches: cachedHutches ? JSON.parse(cachedHutches) : [],
+        pens: cachedPens ? JSON.parse(cachedPens) : [],
       }
     } catch (error) {
       showError('Error', error?.toString())
-      return { rows: [], hutches: [] }
+      return { rows: [], pens: [] }
     }
   }
 
-  const saveToStorage = (farmId: string, data: { rows: any[], hutches: any[] }) => {
+  const saveToStorage = (farmId: string, data: { rows: any[], pens: any[] }) => {
     try {
       localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows))
-      localStorage.setItem(`pig_farm_hutches_${farmId}`, JSON.stringify(data.hutches))
+      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens))
     } catch (error) {
       showError('Error', error?.toString())
     }
@@ -55,28 +55,28 @@ export default function AddHutchDialog() {
     if (open && user?.farm_id) {
       // Check local storage first
       const cachedData = loadFromStorage(user.farm_id)
-      if (cachedData.rows.length || cachedData.hutches.length) {
+      if (cachedData.rows.length || cachedData.pens.length) {
         setRows(cachedData.rows)
-        setHutches(cachedData.hutches)
+        setPens(cachedData.pens)
       }
 
       // Fetch fresh data from API
       const fetchData = async () => {
         try {
-          const [rowsResponse, hutchesResponse] = await Promise.all([
+          const [rowsResponse, pensResponse] = await Promise.all([
             axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`),
-            axios.get(`${utils.apiUrl}/hutches/${user.farm_id}`),
+            axios.get(`${utils.apiUrl}/pens/${user.farm_id}`),
           ])
           const newRows = rowsResponse.data.data || []
-          const newHutches = hutchesResponse.data.data || []
+          const newPens = pensResponse.data.data || []
           setRows(newRows)
-          setHutches(newHutches)
-          saveToStorage(user.farm_id ?? '', { rows: newRows, hutches: newHutches })
+          setPens(newPens)
+          saveToStorage(user.farm_id ?? '', { rows: newRows, pens: newPens })
         } catch (error) {
           showError('Error', error?.toString())
-          if (cachedData.rows.length || cachedData.hutches.length) {
+          if (cachedData.rows.length || cachedData.pens.length) {
             setRows(cachedData.rows)
-            setHutches(cachedData.hutches)
+            setPens(cachedData.pens)
           }
         }
       }
@@ -84,18 +84,18 @@ export default function AddHutchDialog() {
     }
   }, [open, user])
 
-  const getRowHutchCount = (rowName: string) => {
-    return hutches.filter((hutch) => hutch.row_name === rowName).length
+  const getRowPenCount = (rowName: string) => {
+    return pens.filter((pen) => pen.row_name === rowName).length
   }
 
   const getAvailableRows = () => {
-    return rows.filter((row) => getRowHutchCount(row.name) < 18)
+    return rows.filter((row) => getRowPenCount(row.name) < 18)
   }
 
   const getNextAvailablePosition = (rowName: string, level: string) => {
-    const existingPositions = hutches
-      .filter((hutch) => hutch.row_name === rowName && hutch.level === level)
-      .map((hutch) => hutch.position)
+    const existingPositions = pens
+      .filter((pen) => pen.row_name === rowName && pen.level === level)
+      .map((pen) => pen.position)
 
     for (let i = 1; i <= 6; i++) {
       if (!existingPositions.includes(i)) {
@@ -112,13 +112,13 @@ export default function AddHutchDialog() {
       return
     }
 
-    const currentHutchCount = getRowHutchCount(formData.rowName)
-    if (currentHutchCount >= 18) {
+    const currentPenCount = getRowPenCount(formData.rowName)
+    if (currentPenCount >= 18) {
       showWarn('Error', "This row is full! Please add a new row first.")
       return
     }
 
-    const newHutch = {
+    const newPen = {
       id: `${formData.rowName}-${formData.level}${formData.position}`,
       farm_id: user.farm_id,
       row_name: formData.rowName,
@@ -134,12 +134,12 @@ export default function AddHutchDialog() {
     }
 
     try {
-      const response = await axios.post(`${utils.apiUrl}/hutches/${user.farm_id}`, newHutch)
+      const response = await axios.post(`${utils.apiUrl}/pens/${user.farm_id}`, newPen)
       if (response.data.success) {
         // Update local storage
-        const updatedHutches = [...hutches, response.data.data]
-        saveToStorage(user.farm_id, { rows, hutches: updatedHutches })
-        setHutches(updatedHutches)
+        const updatedPens = [...pens, response.data.data]
+        saveToStorage(user.farm_id, { rows, pens: updatedPens })
+        setPens(updatedPens)
         setOpen(false)
         setFormData({
           rowName: "",
@@ -150,7 +150,7 @@ export default function AddHutchDialog() {
           features: "",
         })
       } else {
-        showError('Error', "Failed to create hutch")
+        showError('Error', "Failed to create pen")
       }
     } catch (error: any) {
       showError('Error', `${error.response?.data?.message}`)
@@ -164,12 +164,12 @@ export default function AddHutchDialog() {
       <DialogTrigger asChild>
         <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
           <Plus className="h-4 w-4 mr-2" />
-          Add Hutch
+          Add Pen
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] bg-white/95 backdrop-blur-sm">
         <DialogHeader>
-          <DialogTitle>Add New Hutch</DialogTitle>
+          <DialogTitle>Add New Pen</DialogTitle>
         </DialogHeader>
 
         {availableRows.length === 0 ? (
@@ -179,8 +179,8 @@ export default function AddHutchDialog() {
               <div>
                 <h4 className="font-medium text-amber-800">All Rows Full</h4>
                 <p className="text-sm text-amber-700 mt-1">
-                  All existing rows have reached their maximum capacity of 18 hutches. Please add a new row first before
-                  adding more hutches.
+                  All existing rows have reached their maximum capacity of 18 pens. Please add a new row first before
+                  adding more pens.
                 </p>
                 <Button className="mt-3 bg-amber-600 hover:bg-amber-700" size="sm" onClick={() => setOpen(false)}>
                   Add New Row Instead
@@ -204,7 +204,7 @@ export default function AddHutchDialog() {
                 <SelectContent>
                   {availableRows.map((row) => (
                     <SelectItem key={row.name} value={row.name}>
-                      {row.name} ({getRowHutchCount(row.name)}/18 hutches)
+                      {row.name} ({getRowPenCount(row.name)}/18 pens)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -245,7 +245,7 @@ export default function AddHutchDialog() {
                       const isOccupied =
                         formData.rowName &&
                         formData.level &&
-                        hutches.some(
+                        pens.some(
                           (h) => h.row_name === formData.rowName && h.level === formData.level && h.position === num
                         )
                       return (
@@ -261,7 +261,7 @@ export default function AddHutchDialog() {
             </div>
 
             <div>
-              <Label htmlFor="size">Hutch Size</Label>
+              <Label htmlFor="size">Pen Size</Label>
               <Select value={formData.size} onValueChange={(value) => setFormData({ ...formData, size: value })}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select size" />
@@ -309,7 +309,7 @@ export default function AddHutchDialog() {
                 Cancel
               </Button>
               <Button type="submit" disabled={!formData.rowName || !formData.level || !formData.position}>
-                Add Hutch
+                Add Pen
               </Button>
             </div>
           </form>

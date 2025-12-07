@@ -11,22 +11,22 @@ import { Circle, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as utils from "@/lib/utils";
 import axios from "axios";
-import type { AddKitDialogProps, KitFormData } from "@/types";
+import type { AddPigletDialogProps, PigletFormData } from "@/types";
 import { colors } from "@/lib/constants";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { addKit, removeKit, updateKit, clearKits, setLoading, setError } from "@/lib/reducers/kits/kitsSlice";
+import { addPiglet, removePiglet, updatePiglet, clearPiglets, setLoading, setError } from "@/lib/reducers/piglets/pigletsSlice";
 
-export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, onKitAdded }: AddKitDialogProps) {
+export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose, onPigletAdded }: AddPigletDialogProps) {
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
   const dispatch = useAppDispatch();
-  const { kits, isLoading, nextKitNumber } = useAppSelector((state) => state.kits);
+  const { piglets, isLoading, nextPigletNumber } = useAppSelector((state) => state.piglets);
 
   const [actualBirthDate, setActualBirthDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [boarOptions, setBoarOptions] = useState<any>([]);
   const [selectedBoarOption, setSelectedBoarOption] = useState<any | null>(null);
 
-  // Fetch existing kits to determine next kit_number
+  // Fetch existing piglets to determine next piglet_number
   useEffect(() => {
     if (!user?.farm_id) return;
 
@@ -65,51 +65,51 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
     }
 
     fetchInitialData();
-    dispatch(clearKits());
+    dispatch(clearPiglets());
   }, [user, sowId, dispatch, showError])
 
-  const handleAddKit = useCallback(() => {
-    dispatch(addKit());
+  const handleAddPiglet = useCallback(() => {
+    dispatch(addPiglet());
   }, [dispatch]);
 
-  const handleRemoveKit = useCallback(
+  const handleRemovePiglet = useCallback(
     (index: number) => {
-      dispatch(removeKit(index));
+      dispatch(removePiglet(index));
     },
     [dispatch],
   )
 
-  const handleUpdateKit = useCallback(
-    (index: number, field: keyof KitFormData, value: string) => {
-      dispatch(updateKit({ index, field, value }));
+  const handleUpdatePiglet = useCallback(
+    (index: number, field: keyof PigletFormData, value: string) => {
+      dispatch(updatePiglet({ index, field, value }));
     },
     [dispatch],
   )
 
-  const validateKits = (): boolean => {
+  const validatePiglets = (): boolean => {
     if (!actualBirthDate || isNaN(new Date(actualBirthDate).getTime())) {
       showError("Error", "A valid actual birth date is required.");
       return false;
     }
-    if (kits.length === 0) {
-      showError("Error", "At least one kit is required.");
+    if (piglets.length === 0) {
+      showError("Error", "At least one piglet is required.");
       return false;
     }
-    for (const kit of kits) {
-      if (!kit.kit_number || !kit.status) {
-        showError("Error", `Kit number and status are required for kit ${kit.kit_number || "unnamed"}.`);
+    for (const piglet of piglets) {
+      if (!piglet.piglet_number || !piglet.status) {
+        showError("Error", `Piglet number and status are required for piglet ${piglet.piglet_number || "unnamed"}.`);
         return false;
       }
       if (
-        kit.birth_weight &&
-        kit.birth_weight.trim() !== "" &&
-        (isNaN(Number.parseFloat(kit.birth_weight)) || Number.parseFloat(kit.birth_weight) <= 0)
+        piglet.birth_weight &&
+        piglet.birth_weight.trim() !== "" &&
+        (isNaN(Number.parseFloat(piglet.birth_weight)) || Number.parseFloat(piglet.birth_weight) <= 0)
       ) {
-        showError("Error", `Birth weight for kit ${kit.kit_number} must be a positive number.`);
+        showError("Error", `Birth weight for piglet ${piglet.piglet_number} must be a positive number.`);
         return false
       }
-      if (kits.filter((k) => k.kit_number === kit.kit_number).length > 1) {
-        showError("Error", `Kit number ${kit.kit_number} is duplicated.`);
+      if (piglets.filter((k) => k.piglet_number === piglet.piglet_number).length > 1) {
+        showError("Error", `Piglet number ${piglet.piglet_number} is duplicated.`);
         return false;
       }
     }
@@ -123,7 +123,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
       return;
     }
 
-    if (!validateKits()) return;
+    if (!validatePiglets()) return;
 
     dispatch(setLoading(true));
     try {
@@ -147,8 +147,8 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
               .split("T")[0],
             expected_birth_date: actualBirthDate,
             actual_birth_date: actualBirthDate,
-            number_of_kits: kits.length,
-            notes: kits[0]?.notes || null,
+            number_of_piglets: piglets.length,
+            notes: piglets[0]?.notes || null,
           },
           { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
         );
@@ -160,8 +160,8 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
           `${utils.apiUrl}/breeds/${user.farm_id}/${specificBreedingRecord.id}`,
           {
             actual_birth_date: actualBirthDate,
-            number_of_kits: kits.length,
-            notes: kits[0]?.notes || null,
+            number_of_piglets: piglets.length,
+            notes: piglets[0]?.notes || null,
           },
           { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
         );
@@ -178,33 +178,33 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
         { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
       );
 
-      // Create kit records
-      const kitData = kits.map((kit) => ({
+      // Create piglet records
+      const pigletData = piglets.map((piglet) => ({
         breeding_record_id: breedingRecordId,
-        kit_number: kit.kit_number,
-        birth_weight: kit.birth_weight && kit.birth_weight.trim() !== "" ? Number.parseFloat(kit.birth_weight) : null,
-        gender: kit.gender || null,
-        color: kit.color || null,
-        status: kit.status || "alive",
+        piglet_number: piglet.piglet_number,
+        birth_weight: piglet.birth_weight && piglet.birth_weight.trim() !== "" ? Number.parseFloat(piglet.birth_weight) : null,
+        gender: piglet.gender || null,
+        color: piglet.color || null,
+        status: piglet.status || "alive",
         parent_male_id: selectedBoarOption?.boar_id || null,
         parent_female_id: sowId,
-        notes: kit.notes || null,
+        notes: piglet.notes || null,
         actual_birth_date: actualBirthDate,
       }));
 
       const response = await axios.post(
-        `${utils.apiUrl}/breeds/kits/${user.farm_id}`,
-        { kitz: kitData },
+        `${utils.apiUrl}/breeds/piglets/${user.farm_id}`,
+        { pigletz: pigletData },
         { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
       );
 
       if (response.data.success) {
-        showSuccess("Success", `${kits.length} kit${kits.length !== 1 ? "s" : ""} added successfully.`)
-        dispatch(clearKits());
-        onKitAdded();
+        showSuccess("Success", `${piglets.length} piglet${piglets.length !== 1 ? "s" : ""} added successfully.`)
+        dispatch(clearPiglets());
+        onPigletAdded();
         onClose();
       } else {
-        throw new Error(response.data.message || "Failed to create kit records")
+        throw new Error(response.data.message || "Failed to create piglet records")
       }
     } catch (error: any) {
       showError("Error", error.response?.data?.message || error.message)
@@ -214,9 +214,9 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
     }
   }
 
-  // Summary of kits
-  const femaleCount = kits.filter((kit) => kit.gender === "female").length
-  const maleCount = kits.filter((kit) => kit.gender === "male").length
+  // Summary of piglets
+  const femaleCount = piglets.filter((piglet) => piglet.gender === "female").length
+  const maleCount = piglets.filter((piglet) => piglet.gender === "male").length
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
@@ -232,7 +232,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
         <DialogHeader className="bg-gradient-to-r from-green-400 to-blue-500 dark:from-green-600 dark:to-blue-600 -m-6 p-6 rounded-t-lg border-b border-gray-200 dark:border-gray-600">
           <DialogTitle className="flex items-center space-x-2 text-white">
             <Circle className="h-5 w-5 text-green-200" />
-            <span>Add Kits for {pig.name}</span>
+            <span>Add Piglets for {pig.name}</span>
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -319,22 +319,22 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <Label className="text-gray-900 dark:text-gray-100 font-medium">
-                Kits ({kits.length} total: {femaleCount} female
+                Piglets ({piglets.length} total: {femaleCount} female
                 {femaleCount !== 1 ? "s" : ""}, {maleCount} male
                 {maleCount !== 1 ? "s" : ""})
               </Label>
               <Button
                 type="button"
-                onClick={handleAddKit}
+                onClick={handleAddPiglet}
                 variant="outline"
                 className="bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800/50"
               >
-                Add Kit
+                Add Piglet
               </Button>
             </div>
-            {kits.length > 0 && (
+            {piglets.length > 0 && (
               <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center font-medium text-sm text-gray-900 dark:text-gray-100">
-                <span>Kit Number</span>
+                <span>Piglet Number</span>
                 <span>Gender</span>
                 <span>Color</span>
                 <span>Status</span>
@@ -343,19 +343,19 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                 <span></span>
               </div>
             )}
-            {kits.map((kit, index) => (
+            {piglets.map((piglet, index) => (
               <div
-                key={`${kit.kit_number}-${index}`}
+                key={`${piglet.piglet_number}-${index}`}
                 className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center"
               >
                 <div>
-                  <Label htmlFor={`kit_number_${index}`} className="sr-only">
-                    Kit Number
+                  <Label htmlFor={`piglet_number_${index}`} className="sr-only">
+                    Piglet Number
                   </Label>
                   <Input
-                    id={`kit_number_${index}`}
-                    value={kit.kit_number}
-                    onChange={(e) => handleUpdateKit(index, "kit_number", e.target.value)}
+                    id={`piglet_number_${index}`}
+                    value={piglet.piglet_number}
+                    onChange={(e) => handleUpdatePiglet(index, "piglet_number", e.target.value)}
                     className="text-sm px-2 py-1 h-8 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     style={{ width: "80px" }}
                     required
@@ -365,7 +365,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                   <Label htmlFor={`gender_${index}`} className="sr-only">
                     Gender
                   </Label>
-                  <Select value={kit.gender} onValueChange={(value) => handleUpdateKit(index, "gender", value)}>
+                  <Select value={piglet.gender} onValueChange={(value) => handleUpdatePiglet(index, "gender", value)}>
                     <SelectTrigger className="text-sm px-2 py-1 h-8 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600">
                       <SelectValue placeholder="Gender" />
                     </SelectTrigger>
@@ -379,7 +379,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                   <Label htmlFor={`color_${index}`} className="sr-only">
                     Color
                   </Label>
-                  <Select value={kit.color} onValueChange={(value) => handleUpdateKit(index, "color", value)}>
+                  <Select value={piglet.color} onValueChange={(value) => handleUpdatePiglet(index, "color", value)}>
                     <SelectTrigger className="text-sm px-2 py-1 h-8 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600">
                       <SelectValue placeholder="Color" />
                     </SelectTrigger>
@@ -396,7 +396,7 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                   <Label htmlFor={`status_${index}`} className="sr-only">
                     Status
                   </Label>
-                  <Select value={kit.status} onValueChange={(value) => handleUpdateKit(index, "status", value)}>
+                  <Select value={piglet.status} onValueChange={(value) => handleUpdatePiglet(index, "status", value)}>
                     <SelectTrigger className="text-sm px-2 py-1 h-8 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
@@ -414,8 +414,8 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                     id={`birth_weight_${index}`}
                     type="number"
                     step="0.01"
-                    value={kit.birth_weight}
-                    onChange={(e) => handleUpdateKit(index, "birth_weight", e.target.value)}
+                    value={piglet.birth_weight}
+                    onChange={(e) => handleUpdatePiglet(index, "birth_weight", e.target.value)}
                     className="text-sm px-2 py-1 h-8 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     style={{ width: "60px" }}
                   />
@@ -424,16 +424,16 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleRemoveKit(index)}
+                  onClick={() => handleRemovePiglet(index)}
                   className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 h-8 w-8 p-0"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             ))}
-            {kits.length === 0 && (
+            {piglets.length === 0 && (
               <p className="text-gray-600 dark:text-gray-400 text-sm text-center">
-                No kits added. Click "Add Kit" to start.
+                No piglets added. Click "Add Piglet" to start.
               </p>
             )}
           </div>
@@ -448,10 +448,10 @@ export default function AddKitDialog({ pig, sowId, sowName, boarName, onClose, o
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || kits.length === 0}
+              disabled={isLoading || piglets.length === 0}
               className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white"
             >
-              {isLoading ? "Submitting..." : `Add ${kits.length} Kit${kits.length !== 1 ? "s" : ""}`}
+              {isLoading ? "Submitting..." : `Add ${piglets.length} Piglet${piglets.length !== 1 ? "s" : ""}`}
             </Button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-import { Hutch } from "./hutches";
+import { Pen } from "./pens";
 import { Pig } from "./pigs";
 
 export interface HealthRecord {
@@ -13,6 +13,6 @@ export interface HealthRecord {
 }
 
 export interface HealthTrackerProps {
-  pigs: Pig[]
-  hutches: Hutch[];
+  pigs: Pig[];
+  pens: Pen[];
 }

@@ -18,7 +18,7 @@ export interface ServerAlert {
   farm_id: string;
   user_id?: string;
   pig_id?: string;
-  hutch_id?: string;
+  pen_id?: string;
   created_on: string;
   updated_on: string;
   is_active: boolean;
@@ -37,7 +37,7 @@ export interface AlertCalendar {
   farm_id: string;
   user_id: string;
   pig_id: string;
-  hutch_id: string;
+  pen_id: string;
   notify_on: string[];
   created_on: string;
   updated_on: string;
