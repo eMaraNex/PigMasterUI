@@ -20,7 +20,12 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const { user } = useAuth()
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
+  const [viewRecordsOpen, setViewRecordsOpen] = useState(false)
+  const [selectedPig, setSelectedPig] = useState<Pig | null>(null)
   const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
+  const [pigRecords, setPigRecords] = useState<any[]>([])
+  const [loadingRecords, setLoadingRecords] = useState(false)
+
 
   useEffect(() => {
     setLocalPigs(pigs || [])
@@ -65,6 +70,65 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const upcomingPigs = localPigs?.filter((r) => getHealthStatus(r) === "upcoming") || []
   const healthyPigs = localPigs?.filter((r) => getHealthStatus(r) === "good") || []
 
+ 
+  const fetchPigHealthRecords = async (pigId: string) => {
+    setLoadingRecords(true)
+    try {
+      const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` }
+      })
+      const records = response?.data?.data ?? response?.data
+      setPigRecords(Array.isArray(records) ? records : [])
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message || 'Failed to fetch records')
+      setPigRecords([])
+    } finally {
+      setLoadingRecords(false)
+    }
+  }
+
+  const deleteHealthRecord = async (recordId:string) => {
+    try {
+      const resp = await axios.delete(
+        `${utils.apiUrl}/health/${recordId}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+      )
+      const deleted = resp?.data?.data ?? resp?.data
+      setLocalPigs(prev => prev.map(p => ({
+        ...p,
+        healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id)
+      })))
+      setPigRecords(prev => prev.filter(r => r.id !== deleted.id))
+      showSuccess('Success', 'Record deleted')
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message)
+    }
+  }
+
+  const handleUpdateHealthRecord = async (recordId: string) => {
+    try {
+      const resp = await axios.put(
+        `${utils.apiUrl}/health/${recordId}`,
+        { status: 'completed' },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+      )
+      const updated = resp?.data?.data ?? resp?.data
+      setLocalPigs(prev => prev.map(p => ({
+        ...p,
+        healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r)
+      })))
+      setPigRecords(prev => prev.map(r => r.id === updated.id ? updated : r))
+      showSuccess('Success', 'Record marked as completed')
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message)
+    }
+  }
+  
+  useEffect(() => {
+    if (viewRecordsOpen && selectedPig?.pig_id) {
+      fetchPigHealthRecords(selectedPig.pig_id)
+    }
+  }, [viewRecordsOpen, selectedPig?.pig_id])
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
       {/* Health Overview */}
@@ -383,6 +447,10 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                       size="sm"
                       variant="outline"
                       className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 ml-2 sm:ml-0 flex-shrink-0"
+                      onClick={() => {
+                        setSelectedPig(pig)
+                        setViewRecordsOpen(true)
+                      }}
                     >
                       <span className="text-xs sm:text-sm">View Records</span>
                     </Button>
@@ -393,6 +461,128 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={viewRecordsOpen} onOpenChange={setViewRecordsOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Health Records for {selectedPig?.name || selectedPig?.pig_id}
+            </DialogTitle>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Pen {penNamesConversion(pens, selectedPig?.pen_id ?? '')} • {selectedPig?.breed} • {selectedPig?.gender === "female" ? "Sow" : "Boar"}
+            </p>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {loadingRecords ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 dark:text-gray-400">Loading records...</p>
+              </div>
+            ) : pigRecords && pigRecords.length > 0 ? (
+              pigRecords
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((record) => (
+                  <div
+                    key={record.id}
+                    className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
+                          {record.type}
+                        </h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(record.date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={record.status === 'completed' ? 'default' : 'secondary'}
+                        className={`${record.status === 'completed'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-amber-500 text-white'
+                          }`}
+                      >
+                        {record.status}
+                      </Badge>
+                    </div>
+
+                    {record.description && (
+                      <div className="mb-2">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Description:</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.description}</p>
+                      </div>
+                    )}
+
+                    {record.veterinarian && (
+                      <div className="mb-2">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Veterinarian:</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.veterinarian}</p>
+                      </div>
+                    )}
+
+                    {record.nextDue && (
+                      <div className="mb-2">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Next Due:</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(record.nextDue).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    )}
+
+                    {record.notes && (
+                      <div className="mb-2">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes:</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.notes}</p>
+                      </div>
+                    )}
+
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        Created: {new Date(record.created_at).toLocaleDateString()}
+                      </p>
+                      <div className="flex space-x-2">
+                        {record.status !== 'completed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                            onClick={() => handleUpdateHealthRecord(record.id)}
+                          >
+                            Mark Complete
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="text-xs"
+                          onClick={() => deleteHealthRecord(record.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500 dark:text-gray-400">No health records found for this pig.</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="outline" onClick={() => setViewRecordsOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
