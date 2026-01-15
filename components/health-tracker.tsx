@@ -87,6 +87,42 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     }
   }
 
+  const deleteHealthRecord = async (recordId:string) => {
+    try {
+      const resp = await axios.delete(
+        `${utils.apiUrl}/health/${recordId}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+      )
+      const deleted = resp?.data?.data ?? resp?.data
+      setLocalPigs(prev => prev.map(p => ({
+        ...p,
+        healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id)
+      })))
+      setPigRecords(prev => prev.filter(r => r.id !== deleted.id))
+      showSuccess('Success', 'Record deleted')
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message)
+    }
+  }
+
+  const handleUpdateHealthRecord = async (recordId: string) => {
+    try {
+      const resp = await axios.put(
+        `${utils.apiUrl}/health/${recordId}`,
+        { status: 'completed' },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+      )
+      const updated = resp?.data?.data ?? resp?.data
+      setLocalPigs(prev => prev.map(p => ({
+        ...p,
+        healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r)
+      })))
+      setPigRecords(prev => prev.map(r => r.id === updated.id ? updated : r))
+      showSuccess('Success', 'Record marked as completed')
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message)
+    }
+  }
   
   useEffect(() => {
     if (viewRecordsOpen && selectedPig?.pig_id) {
@@ -517,24 +553,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                             size="sm"
                             variant="outline"
                             className="text-xs"
-                            onClick={async () => {
-                              try {
-                                const resp = await axios.put(
-                                  `${utils.apiUrl}/health/${record.id}`,
-                                  { status: 'completed' },
-                                  { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
-                                )
-                                const updated = resp?.data?.data ?? resp?.data
-                                setLocalPigs(prev => prev.map(p => ({
-                                  ...p,
-                                  healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r)
-                                })))
-                                setPigRecords(prev => prev.map(r => r.id === updated.id ? updated : r))
-                                showSuccess('Success', 'Record marked as completed')
-                              } catch (err: any) {
-                                showError('Error', err?.response?.data?.message || err?.message)
-                              }
-                            }}
+                            onClick={() => handleUpdateHealthRecord(record.id)}
                           >
                             Mark Complete
                           </Button>
@@ -543,23 +562,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                           size="sm"
                           variant="destructive"
                           className="text-xs"
-                          onClick={async () => {
-                            try {
-                              const resp = await axios.delete(
-                                `${utils.apiUrl}/health/${record.id}`,
-                                { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
-                              )
-                              const deleted = resp?.data?.data ?? resp?.data
-                              setLocalPigs(prev => prev.map(p => ({
-                                ...p,
-                                healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id)
-                              })))
-                              setPigRecords(prev => prev.filter(r => r.id !== deleted.id))
-                              showSuccess('Success', 'Record deleted')
-                            } catch (err: any) {
-                              showError('Error', err?.response?.data?.message || err?.message)
-                            }
-                          }}
+                          onClick={() => deleteHealthRecord(record.id)}
                         >
                           Delete
                         </Button>
