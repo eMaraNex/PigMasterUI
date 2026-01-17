@@ -114,38 +114,53 @@ export const getFarmTrialInfo = (): TrialInfo => {
   }
 
   try {
-    // First, check farm creation date
-    const farmDataRaw = localStorage.getItem("pig_farm_data");
     let createdAt: string | null = null;
 
-    if (farmDataRaw) {
+    // Priority 1: Check user creation date (most reliable for new accounts)
+    const userDataRaw = localStorage.getItem("pig_farm_user");
+    if (userDataRaw) {
       try {
-        const farmData = JSON.parse(farmDataRaw);
-        createdAt = farmData?.created_at ?? farmData?.createdAt ?? null;
+        const userData = JSON.parse(userDataRaw);
+        createdAt = userData?.created_at ?? null;
       } catch (error) {
-        console.error("Failed to parse farm data:", error);
+        console.error("Failed to parse user data:", error);
       }
     }
 
-    // If no farm data, check user creation date
+    // Priority 2: Check farm creation date (if user creation date not available)
     if (!createdAt) {
-      const userDataRaw = localStorage.getItem("pig_farm_user");
-      if (userDataRaw) {
+      const farmDataRaw = localStorage.getItem("pig_farm_data");
+      if (farmDataRaw) {
         try {
-          const userData = JSON.parse(userDataRaw);
-          createdAt = userData?.created_at ?? null;
+          const farmData = JSON.parse(farmDataRaw);
+          createdAt = farmData?.created_at ?? farmData?.createdAt ?? null;
         } catch (error) {
-          console.error("Failed to parse user data:", error);
+          console.error("Failed to parse farm data:", error);
         }
       }
     }
+
+    // If still no creation date, assume trial is active (new user just signed up)
     if (!createdAt) {
-      return defaultTrialInfo;
+      // For new users without a farm yet, assume they just signed up
+      // Return a trial active status with maximum days left
+      return {
+        isTrialActive: true,
+        trialEndsAt: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        trialDaysLeft: 30
+      };
     }
+
     const createdDate = new Date(createdAt);
     if (Number.isNaN(createdDate.getTime())) {
-      return defaultTrialInfo;
+      // Invalid date, assume trial is active for new users
+      return {
+        isTrialActive: true,
+        trialEndsAt: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        trialDaysLeft: 30
+      };
     }
+
     const trialEndDate = new Date(
       createdDate.getTime() + TRIAL_PERIOD_DAYS * DAY_IN_MS
     );
@@ -165,7 +180,12 @@ export const getFarmTrialInfo = (): TrialInfo => {
     };
   } catch (error) {
     console.error("Failed to parse farm trial info:", error);
-    return defaultTrialInfo;
+    // On error, assume trial is active to not lock out new users
+    return {
+      isTrialActive: true,
+      trialEndsAt: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      trialDaysLeft: 30
+    };
   }
 };
 

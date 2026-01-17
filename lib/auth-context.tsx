@@ -142,15 +142,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatar_url: user?.avatar_url ?? "",
           created_at: user?.created_at ?? ""
         };
-        const farmData = await axios.get(`${utils.apiUrl}/farms/${userData.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        
         // Store token in cookie with 7-day expiration
         Cookies.set("pig_farm_token", token, { expires: 7, secure: true, sameSite: "strict", path: "/" });
         localStorage.setItem('pig_farm_token', token);
         localStorage.setItem("pig_farm_user", JSON.stringify(userData));
         localStorage.setItem("pig_farm_id", JSON.stringify(userData.farm_id));
-        localStorage.setItem("pig_farm_data", JSON.stringify(farmData.data.data));
+        
+        // Only fetch farm data if user has a farm
+        if (userData.farm_id) {
+          try {
+            const farmData = await axios.get(`${utils.apiUrl}/farms/${userData.farm_id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            localStorage.setItem("pig_farm_data", JSON.stringify(farmData.data.data));
+          } catch (farmError) {
+            console.warn("Failed to fetch farm data:", farmError);
+            // Continue without farm data - user might not have a farm yet
+          }
+        }
+        
         setUser(userData);
         setAuthHeader(token);
         router.push("/");
@@ -277,18 +288,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   farm_id: backendUser?.farm_id ?? '',
                   role_id: backendUser?.role_id ?? '',
                   email_verified: backendUser?.email_verified ?? (user.emailVerified ? true : false),
-                  avatar_url: backendUser?.avatar_url ?? ''
+                  avatar_url: backendUser?.avatar_url ?? '',
+                  created_at: backendUser?.created_at ?? ''
               };
 
-              const farmData = await axios.get(`${utils.apiUrl}/farms/${authUser.farm_id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
               // Store backend JWT in cookie with 7-day expiration
               Cookies.set('pig_farm_token', token, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
               localStorage.setItem('pig_farm_token', token);
               localStorage.setItem('pig_farm_user', JSON.stringify(authUser));
               localStorage.setItem('pig_farm_id', JSON.stringify(authUser.farm_id));
-              localStorage.setItem("pig_farm_data", JSON.stringify(farmData.data.data));
+              
+              // Only fetch farm data if user has a farm
+              if (authUser.farm_id) {
+                  try {
+                      const farmData = await axios.get(`${utils.apiUrl}/farms/${authUser.farm_id}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      localStorage.setItem("pig_farm_data", JSON.stringify(farmData.data.data));
+                  } catch (farmError) {
+                      console.warn("Failed to fetch farm data for SSO user:", farmError);
+                      // Continue without farm data - user might not have a farm yet
+                  }
+              }
+              
               setUser(authUser);
               setAuthHeader(token);
               router.push('/');
