@@ -47,6 +47,7 @@ export default function LoginPage() {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const { showError, showSuccess } = useToast();
+  const currentYear = new Date().getFullYear();
 
   const validateField = (field: keyof LoginFormData | 'forgot_email', value: string): string | null => {
     switch (field) {
@@ -411,7 +412,7 @@ export default function LoginPage() {
         </Dialog>
 
         <div className="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
-          <p>© 2025 Pig Farming. All rights reserved.</p>
+          <p>© {currentYear} Pig Farming. All rights reserved.</p>
         </div>
       </div>
     </div>
