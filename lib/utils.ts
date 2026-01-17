@@ -114,12 +114,31 @@ export const getFarmTrialInfo = (): TrialInfo => {
   }
 
   try {
+    // First, check farm creation date
     const farmDataRaw = localStorage.getItem("pig_farm_data");
-    if (!farmDataRaw) {
-      return defaultTrialInfo;
+    let createdAt: string | null = null;
+
+    if (farmDataRaw) {
+      try {
+        const farmData = JSON.parse(farmDataRaw);
+        createdAt = farmData?.created_at ?? farmData?.createdAt ?? null;
+      } catch (error) {
+        console.error("Failed to parse farm data:", error);
+      }
     }
-    const farmData = JSON.parse(farmDataRaw);
-    const createdAt = farmData?.created_at ?? farmData?.createdAt;
+
+    // If no farm data, check user creation date
+    if (!createdAt) {
+      const userDataRaw = localStorage.getItem("pig_farm_user");
+      if (userDataRaw) {
+        try {
+          const userData = JSON.parse(userDataRaw);
+          createdAt = userData?.created_at ?? null;
+        } catch (error) {
+          console.error("Failed to parse user data:", error);
+        }
+      }
+    }
     if (!createdAt) {
       return defaultTrialInfo;
     }
