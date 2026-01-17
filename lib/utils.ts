@@ -127,19 +127,6 @@ export const getFarmTrialInfo = (): TrialInfo => {
       }
     }
 
-    // Priority 2: Check farm creation date (if user creation date not available)
-    if (!createdAt) {
-      const farmDataRaw = localStorage.getItem("pig_farm_data");
-      if (farmDataRaw) {
-        try {
-          const farmData = JSON.parse(farmDataRaw);
-          createdAt = farmData?.created_at ?? farmData?.createdAt ?? null;
-        } catch (error) {
-          console.error("Failed to parse farm data:", error);
-        }
-      }
-    }
-
     // If still no creation date, assume trial is active (new user just signed up)
     if (!createdAt) {
       // For new users without a farm yet, assume they just signed up
