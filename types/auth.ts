@@ -12,6 +12,7 @@ export interface User {
   avatar_url?: string;
   phone?: string;
   phone_verified?: boolean;
+  created_at?: string;
 }
 
 export interface AuthResponse {
