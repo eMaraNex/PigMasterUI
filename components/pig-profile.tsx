@@ -4,20 +4,24 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { X, Heart, Pill, Utensils, Edit, Circle } from "lucide-react";
+import { X, Heart, Pill, Utensils, Edit, Circle, ArrowRightLeft } from "lucide-react";
 import axios from "axios";
 import * as utils from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { HealthRecord, PigProfileProps, Pig as PigType } from "@/types";
 import EditPigDialog from "./edit-pig-dialog";
+import TransferPigDialog from "./transfer-pig-dialog";
+import PigTransferHistory from "./pig-transfer-history";
 import { useToast } from "@/lib/toast-provider";
 
-export default function PigProfile({ pig, onClose }: PigProfileProps) {
+export default function PigProfile({ pig, onClose, onTransferComplete }: PigProfileProps & { onTransferComplete?: () => void }) {
   const { user } = useAuth();
   const [pigData, setPigData] = useState<PigType | null>(pig);
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [pens, setPens] = useState<any[]>([]);
   const { showError } = useToast();
 
   const calculateAge = (birth_date: string): number => {
@@ -37,6 +41,8 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
       if (pig && pig.name && pig.breed && pig.pen_name) {
         setPigData(pig);
         setLoading(false);
+        // Load pens for transfer dialog
+        loadPens();
         return;
       }
       setLoading(true);
@@ -54,6 +60,7 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
           if (cachedPig) {
             setPigData(cachedPig);
             setLoading(false);
+            loadPens();
             return;
           }
         }
@@ -70,6 +77,7 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
           const cachedPigs = JSON.parse(localStorage.getItem(`pig_farm_pigs_${user.farm_id}`) || "[]") as PigType[];
           const updatedPigs = cachedPigs.filter((r: PigType) => r.id !== pig.id).concat(response.data.data);
           localStorage.setItem(`pig_farm_pigs_${user.farm_id}`, JSON.stringify(updatedPigs));
+          loadPens();
         } else {
           showError('Error', "Failed to fetch pig data")
         }
@@ -82,6 +90,31 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
 
     fetchPig();
   }, [pig, user]);
+
+  const loadPens = async () => {
+    try {
+      const token = localStorage.getItem("pig_farm_token");
+      if (!token || !user?.farm_id) return;
+
+      // Try localStorage first
+      const cachedPens = localStorage.getItem(`pig_farm_pens_${user.farm_id}`);
+      if (cachedPens) {
+        setPens(JSON.parse(cachedPens));
+        return;
+      }
+
+      // Fetch from API
+      const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.data.success) {
+        setPens(response.data.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading pens:", error);
+    }
+  };
 
   const handleUpdatePig = (updatedPig: PigType) => {
     setPigData(updatedPig);
@@ -365,6 +398,14 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-600">
               <Button
                 variant="outline"
+                onClick={() => setIsTransferDialogOpen(true)}
+                className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+              >
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Transfer Pig
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setIsEditDialogOpen(true)}
                 className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600"
               >
@@ -378,6 +419,11 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
                 Close
               </Button>
             </div>
+
+            {/* Transfer History Section */}
+            {pigData?.pig_id && user?.farm_id && (
+              <PigTransferHistory pigId={pigData.pig_id} farmId={user.farm_id} />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -386,6 +432,24 @@ export default function PigProfile({ pig, onClose }: PigProfileProps) {
           pig={pigData}
           onClose={() => setIsEditDialogOpen(false)}
           onUpdate={handleUpdatePig}
+        />
+      )}
+      {isTransferDialogOpen && pigData && user?.farm_id && (
+        <TransferPigDialog
+          isOpen={isTransferDialogOpen}
+          onClose={() => setIsTransferDialogOpen(false)}
+          pigId={pigData.pig_id!}
+          pigName={(pigData.name || pigData.pig_id)!}
+          farmId={user.farm_id}
+          currentPenId={pigData.pen_id}
+          currentPenName={pigData.pen_name}
+          pens={pens}
+          onTransferSuccess={() => {
+            // Call the parent's refresh function if provided
+            if (onTransferComplete) {
+              onTransferComplete();
+            }
+          }}
         />
       )}
     </>
