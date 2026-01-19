@@ -29,6 +29,13 @@ interface Pen {
   id: string;
   name: string;
   is_occupied?: boolean;
+  row_id?: string;
+  row_name?: string;
+}
+
+interface Row {
+  id: string;
+  name: string;
 }
 
 interface TransferPigDialogProps {
@@ -65,6 +72,7 @@ export default function TransferPigDialog({
   onTransferSuccess,
 }: TransferPigDialogProps) {
   const { showSuccess, showError } = useToast();
+  const [selectedRowId, setSelectedRowId] = useState("");
   const [selectedPenId, setSelectedPenId] = useState("");
   const [transferReason, setTransferReason] = useState("");
   const [transferNotes, setTransferNotes] = useState("");
@@ -72,10 +80,33 @@ export default function TransferPigDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Filter out the current pen from available options
-  const availablePens = pens.filter(
-    (pen) => !currentPenId || pen.id !== currentPenId
-  );
+  // Extract unique rows from pens - more robust approach
+  const rows: Row[] = Array.from(
+    new Map(
+      pens
+        .filter((pen) => pen.row_name) // Filter by row_name only (it should always be present)
+        .map((pen) => {
+          // Use row_id if available, otherwise use row_name as ID
+          const rowId = pen.row_id || pen.row_name || "";
+          const rowName = pen.row_name || "";
+          return [rowId, { id: rowId, name: rowName }];
+        })
+    ).values()
+  ).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  // Filter pens by selected row
+  const pensByRow = selectedRowId
+    ? pens.filter((pen) => {
+        const penRowId = pen.row_id || pen.row_name;
+        return penRowId === selectedRowId && (!currentPenId || pen.id !== currentPenId);
+      })
+    : [];
+
+  // Reset pen selection when row changes
+  const handleRowChange = (rowId: string) => {
+    setSelectedRowId(rowId);
+    setSelectedPenId(""); // Reset pen selection
+  };
 
   const handleTransfer = async () => {
     // Validation
@@ -123,6 +154,7 @@ export default function TransferPigDialog({
 
         // Reset form
         setTimeout(() => {
+          setSelectedRowId("");
           setSelectedPenId("");
           setTransferReason("");
           setTransferNotes("");
@@ -145,6 +177,7 @@ export default function TransferPigDialog({
 
   const handleClose = () => {
     if (!isLoading && !success) {
+      setSelectedRowId("");
       setSelectedPenId("");
       setTransferReason("");
       setTransferNotes("");
@@ -197,29 +230,61 @@ export default function TransferPigDialog({
               </div>
             )}
 
-            {/* Destination Pen */}
+            {/* Select Row */}
+            <div className="space-y-2">
+              <Label htmlFor="row-select" className="text-sm font-medium">
+                Select Row *
+              </Label>
+              <Select
+                value={selectedRowId}
+                onValueChange={handleRowChange}
+                disabled={isLoading}
+              >
+                <SelectTrigger
+                  id="row-select"
+                  className="w-full bg-white dark:bg-gray-800"
+                >
+                  <SelectValue placeholder="Choose a row" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-gray-800">
+                  {rows.length === 0 ? (
+                    <div className="p-2 text-xs text-gray-500">
+                      No rows available
+                    </div>
+                  ) : (
+                    rows.map((row) => (
+                      <SelectItem key={row.id} value={row.id}>
+                        {row.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Select Pen */}
             <div className="space-y-2">
               <Label htmlFor="pen-select" className="text-sm font-medium">
-                Destination Pen *
+                Select Pen *
               </Label>
               <Select
                 value={selectedPenId}
                 onValueChange={setSelectedPenId}
-                disabled={isLoading}
+                disabled={isLoading || !selectedRowId}
               >
                 <SelectTrigger
                   id="pen-select"
                   className="w-full bg-white dark:bg-gray-800"
                 >
-                  <SelectValue placeholder="Select destination pen" />
+                  <SelectValue placeholder={selectedRowId ? "Choose a pen" : "Select a row first"} />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-gray-800">
-                  {availablePens.length === 0 ? (
+                  {pensByRow.length === 0 ? (
                     <div className="p-2 text-xs text-gray-500">
-                      No other pens available
+                      {selectedRowId ? "No available pens in this row" : "Select a row first"}
                     </div>
                   ) : (
-                    availablePens.map((pen) => (
+                    pensByRow.map((pen) => (
                       <SelectItem key={pen.id} value={pen.id}>
                         {pen.name}
                       </SelectItem>
@@ -272,8 +337,8 @@ export default function TransferPigDialog({
 
             {/* Transfer Summary */}
             {selectedPen && (
-              <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg space-y-2">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Transfer Summary
                 </p>
                 <div className="space-y-1 text-xs text-gray-700 dark:text-gray-300">
@@ -285,7 +350,11 @@ export default function TransferPigDialog({
                     {currentPenName || "Unknown"}
                   </p>
                   <p>
-                    <span className="font-medium">To:</span> {selectedPen.name}
+                    <span className="font-medium">To Row:</span>{" "}
+                    {rows.find((r) => r.id === selectedRowId)?.name || "Unknown"}
+                  </p>
+                  <p>
+                    <span className="font-medium">To Pen:</span> {selectedPen.name}
                   </p>
                   <p>
                     <span className="font-medium">Reason:</span>{" "}
@@ -293,6 +362,13 @@ export default function TransferPigDialog({
                       ?.label || transferReason}
                   </p>
                 </div>
+                {selectedPen.row_name && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-2 mt-2">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      ℹ️ Cross-row transfer: This pig will be moved to {selectedPen.row_name} row
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
