@@ -244,6 +244,48 @@ const DashboardContent: React.FC = () => {
     }
   }, [user?.farm_id, loadFromStorage, saveToStorage, showError])
 
+  // Refresh only pigs and pens after transfer
+  const refreshPigsAndPens = useCallback(async () => {
+    if (!user?.farm_id) return;
+
+    try {
+      const token = localStorage.getItem("pig_farm_token");
+      if (!token) return;
+
+      const [pensResponse, pigsResponse] = await Promise.all([
+        axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      let newPigs = pigsResponse.data.data || [];
+      newPigs = newPigs.map((r: any) => ({
+        ...r,
+        expected_birth_date:
+          r.is_pregnant && r.pregnancy_start_date
+            ? new Date(
+              new Date(r.pregnancy_start_date).getTime() +
+              (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000
+            ).toISOString()
+            : r.expected_birth_date,
+      }));
+
+      const newPens = pensResponse.data.data || [];
+
+      // Update state
+      setPens(newPens);
+      setPigs(newPigs);
+
+      // Update localStorage
+      saveToStorage(user.farm_id, { rows, pens: newPens, pigs: newPigs });
+    } catch (error) {
+      console.error("Error refreshing pigs and pens:", error);
+    }
+  }, [user?.farm_id, saveToStorage, rows]);
+
   const handlePigsUpdate = useCallback(
     (updatedPigs: PigType[]) => {
       setPigs(updatedPigs);
@@ -614,7 +656,7 @@ const DashboardContent: React.FC = () => {
                       onRowAdded={handleRowAdded}
                       handleAddRow={handleAddRow}
                     />
-                    {selectedPig && <PigProfile pig={selectedPig} onClose={() => setSelectedPig(null)} />}
+                    {selectedPig && <PigProfile pig={selectedPig} onClose={() => setSelectedPig(null)} onTransferComplete={refreshPigsAndPens} />}
                   </>
                 ) : (
                   <UpgradePrompt feature="Pens" />
