@@ -251,6 +251,8 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
     }
   }
 
+  const sortedDailyRecords = [...dailyRecords].sort((a, b) => new Date(b.feeding_time).getTime() - new Date(a.feeding_time).getTime())
+
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
@@ -522,64 +524,44 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
-          {pigsWithIndividualFeeding.length === 0 ? (
+          {dailyRecords.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <p>No individual feeding records yet.</p>
+              <p>No daily feeding records yet.</p>
               <p className="text-sm mt-2">Use "Record Feeding" to track individual pig or pen feeding.</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
-              {pigsWithIndividualFeeding.map((pig) => {
-                const status = getCurrentFeedingStatus(pig)
-                const lastFed = pig?.feedingSchedule?.lastFed ? new Date(pig.feedingSchedule.lastFed) : new Date()
-                const hoursSinceLastFed = pig?.feedingSchedule?.lastFed ? Math.floor((new Date().getTime() - lastFed.getTime()) / (1000 * 60 * 60)) : 0
-                const dailyAmount = pig?.feedingSchedule?.dailyAmount || "N/A"
-                const feedType = pig?.feedingSchedule?.feedType || "N/A"
-                const times = pig?.feedingSchedule?.times || []
+              {sortedDailyRecords.map((record) => {
+                const isPig = !!record.pig_id
+                const entityId = isPig ? record.pig_id : record.pen_id
+                const entityName = isPig
+                  ? (localPigs.find(p => p.pig_id === entityId)?.name || entityId)
+                  : (pens.find(p => p.id === entityId)?.name || entityId)
+                const entityType = isPig ? 'Pig' : 'Pen'
+                const feedTime = new Date(record.feeding_time).toLocaleString()
                 return (
-                  <div key={pig.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 lg:space-y-0">
+                  <div
+                    key={record.id || record.feeding_time}
+                    className="flex flex-col lg:flex-row lg:items-start lg:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 lg:space-y-0"
+                  >
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        Pen {penNamesConversion(pens, pig.pen_id ?? '')} • {pig?.breed} • {pig?.gender === "female" ? "Sow" : "Boar"}
-                      </p>
+                      <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">
+                        {entityType}: {entityName}
+                      </h4>
                       <div className="mt-2 space-y-1">
                         <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Daily Amount:</span> {dailyAmount}
+                          <span className="font-medium">Feed Type:</span> {record.feed_type || "N/A"}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Feed Type:</span> {feedType}
+                          <span className="font-medium">Amount:</span> {record.amount || "N/A"} {record.unit || ""}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Schedule:</span> {times.length > 0 ? times.join(", ") : "N/A"}
+                          <span className="font-medium">Fed At:</span> {feedTime}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Last Fed:</span> {pig?.feedingSchedule?.lastFed ? `${lastFed.toLocaleDateString()} at ${lastFed.toLocaleTimeString()}` : "Never"}
-                          {pig?.feedingSchedule?.lastFed && <span className="text-gray-500 dark:text-gray-500 ml-1">({hoursSinceLastFed}h ago)</span>}
+                          <span className="font-medium">Notes:</span> {record.notes || "None"}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between sm:flex-row sm:items-center sm:space-x-3">
-                      <Badge variant={status === "overdue" ? "destructive" : status === "due" ? "secondary" : "default"} className={`flex-shrink-0 text-xs whitespace-nowrap ${status === "fed" ? "bg-gradient-to-r from-green-500 to-green-600 text-white" : status === "overdue" ? "bg-gradient-to-r from-red-500 to-red-600" : "bg-gradient-to-r from-amber-500 to-amber-600 text-white"}`}>
-                        {status === "overdue" ? "Overdue" : status === "due" ? "Due" : "Fed"}
-                      </Badge>
-                      <Button size="sm" variant="outline" className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 ml-2 sm:ml-0 flex-shrink-0" onClick={async () => {
-                        try {
-                          if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
-                          const amount = pig?.feedingSchedule?.dailyAmount || '0'
-                          const feedType = pig?.feedingSchedule?.feedType || 'pellets'
-                          const payload = { pig_id: pig.pig_id, farm_id: user.farm_id, feed_type: feedType, amount: amount, unit: 'grams', feeding_time: new Date().toISOString(), record_type: 'daily' }
-                          const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                          const added = resp?.data?.data ?? resp?.data
-                          if (added?.pig_id && added?.feeding_time) {
-                            setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } } : p))
-                          }
-                          showSuccess('Success', 'Feeding recorded')
-                        } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) }
-                      }}>
-                        <Utensils className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                        <span className="text-xs sm:text-sm">Feed Now</span>
-                      </Button>
                     </div>
                   </div>
                 )
