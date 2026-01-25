@@ -107,6 +107,7 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>): JSX.Element {
+  const googleAnalyticsProd = process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
   return (
     <html lang="en">
       <head>
@@ -123,7 +124,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
 
         {/* Google Analytics Script */}
         <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}`}
+          src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsProd}`}
           strategy="afterInteractive"
         />
         <Script
@@ -134,7 +135,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
-              gtag('config', '${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}');
+              gtag('config', '${googleAnalyticsProd}');
             `,
           }}
         />
