@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +93,13 @@ export default function TransferPigDialog({
         })
     ).values()
   ).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  // Auto-select the row if there's only one available
+  useEffect(() => {
+    if (rows.length === 1 && !selectedRowId) {
+      setSelectedRowId(rows[0].id);
+    }
+  }, [rows, selectedRowId]);
 
   // Filter pens by selected row
   const pensByRow = selectedRowId
