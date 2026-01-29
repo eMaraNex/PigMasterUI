@@ -21,9 +21,10 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [pigRecords, setPigRecords] = useState<any[]>([])
   const [pens, setPens] = useState<any[]>([]);
   const { showError } = useToast();
-
+ 
   const calculateAge = (birth_date: string): number => {
     const birth = new Date(birth_date);
     const now = new Date();
@@ -31,6 +32,19 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
     return months;
   };
 
+  const fetchPigHealthRecords = async (pigId: string) => {
+   
+    try {
+      const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` }
+      })
+      const records = response?.data?.data ?? response?.data
+      setPigRecords(Array.isArray(records) ? records : [])
+    } catch (err: any) {
+      showError('Error', err?.response?.data?.message || err?.message || 'Failed to fetch records')
+      setPigRecords([])
+    } 
+  }
   useEffect(() => {
     const fetchPig = async () => {
       if (!user?.farm_id || !pig.id) {
@@ -89,6 +103,9 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
     };
 
     fetchPig();
+    if (pig.pig_id) {
+      fetchPigHealthRecords(pig.pig_id);
+    }
   }, [pig, user]);
 
   const loadPens = async () => {
@@ -299,8 +316,8 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {pigData.healthRecords && pigData.healthRecords.length > 0 ? (
-                    pigData.healthRecords.map((record: HealthRecord, index: number) => (
+                  {pigRecords && pigRecords.length > 0 ? (
+                    pigRecords.map((record: HealthRecord, index: number) => (
                       <div
                         key={index}
                         className="flex justify-between items-center p-3 bg-white/60 dark:bg-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600"
