@@ -9,6 +9,7 @@ import PaymentModal from "@/components/subscription/payment-modal"
 import ProtectedRoute from "@/components/auth/protected-route"
 import { useRouter } from "next/navigation"
 import { useSubscription } from "@/lib/subscription-context"
+import TillPaymentModal from "@/components/subscription/till-payment-modal";
 
 const plans = [
     {
@@ -258,7 +259,7 @@ function PricingContent() {
 
             {/* Payment Modal */}
             {showPayment && selectedPlan && (
-                <PaymentModal
+                <TillPaymentModal
                     plan={plans.find((p) => p.id === selectedPlan)!}
                     onSuccess={() => handlePaymentSuccess(selectedPlan)}
                     onClose={() => setShowPayment(false)}
