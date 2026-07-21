@@ -8,6 +8,7 @@ import { Check, Crown, Zap, Star } from "lucide-react"
 import { useSubscription } from "@/lib/subscription-context"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PaymentModal from "./payment-modal"
+import TillPaymentModal from "./till-payment-modal"
 import { calculateAnnualPrice, getSavePercent } from "@/lib/utils"
 
 const plans = [
@@ -262,7 +263,7 @@ export default function PricingPage() {
 
             {/* Payment Modal */}
             {showPayment && selectedPlan && (
-                <PaymentModal
+                <TillPaymentModal
                     plan={selectedPlan}
                     onSuccess={() => handlePaymentSuccess(selectedPlan.id)}
                     onClose={() => setShowPayment(false)}
