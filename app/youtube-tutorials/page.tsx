@@ -45,7 +45,7 @@ export default function YouTubePage() {
                             <CardContent className="p-0">
                                 <div className="relative aspect-video">
                                     <iframe
-                                        src={`https://www.youtube.com/embed/${video.id}?rel=0&modestbranding=1`}
+                                        // src={`https://www.youtube.com/embed/${video.id}?rel=0&modestbranding=1`}
                                         title={video.title}
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                         allowFullScreen
