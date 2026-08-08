@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import * as utils from "./utils";
 import { AuthContextType, AuthResponse, User } from "@/types";
 import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, googleProvider, firebaseConfigured } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Cookies from "js-cookie";
 
@@ -261,6 +261,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const googleAuth = async (): Promise<AuthResponse> => {
+      if (!firebaseConfigured || !auth || !googleProvider) {
+          return { success: false, message: "Google sign-in is not configured yet. Please set the Firebase environment variables first." };
+      }
+
       try {
           const result = await signInWithPopup(auth, googleProvider);
           const user = result.user;
