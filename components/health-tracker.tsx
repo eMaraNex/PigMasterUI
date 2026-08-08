@@ -356,7 +356,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {localPigs?.map(p => <SelectItem key={p.pig_id} value={p.pig_id}>{p.name || p.pig_id}</SelectItem>)}
+                          {localPigs?.map(p => <SelectItem key={p.pig_id ?? `${p.name}-${p.pen_id}`} value={p.pig_id ?? ''}>{p.name || p.pig_id || 'Unnamed pig'}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

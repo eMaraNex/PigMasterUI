@@ -12,6 +12,7 @@ export interface User {
   subscription_end?: string;
   subscription_plan?: string;
   email_verified?: boolean;
+  avatar?: string;
   avatar_url?: string;
   phone?: string;
   phone_verified?: boolean;
@@ -26,8 +27,9 @@ export interface AuthResponse {
 
 export interface AuthContextType {
   user: User | null;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<AuthResponse>;
-  register: (email: string, password: string, name: string, phone: string) => Promise<AuthResponse>;
+  register: (email: string, password: string, name: string, phone: string, privacyPolicyAccepted: boolean, marketingConsent?: boolean) => Promise<AuthResponse>;
   logout: () => Promise<AuthResponse>;
   forgotPassword: (email: string) => Promise<AuthResponse>;
   resetPassword: (params: { token: string; currentPassword: string; newPassword: string }) => Promise<AuthResponse>;

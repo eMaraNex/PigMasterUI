@@ -15,7 +15,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false); 
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   // Function to decode JWT and check expiration
@@ -93,7 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       );
 
-      setIsInitialized(true); 
+      setIsInitialized(true);
+      setIsLoading(false);
 
       // Cleanup interceptor on unmount
       return () => {
@@ -181,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     name: string,
     phone: string,
-    privacyPolicyAccepted: boolean,
+    privacyPolicyAccepted: boolean = false,
     marketingConsent: boolean = false
   ): Promise<AuthResponse> => {
     try {
@@ -352,7 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, forgotPassword, resetPassword, googleAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, forgotPassword, resetPassword, googleAuth }}>
       {children}
     </AuthContext.Provider>
   );

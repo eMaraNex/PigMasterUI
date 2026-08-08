@@ -22,8 +22,10 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const { showSuccess, showError } = useToast()
   const [addOpen, setAddOpen] = useState(false)
   const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
-  const [periodRecords, setPeriodRecords] = useState([])
-  const [dailyRecords, setDailyRecords] = useState([])
+  const [periodRecords, setPeriodRecords] = useState<any[]>([])
+  const [dailyRecords, setDailyRecords] = useState<any[]>([])
+  const [visibleDailyEntries, setVisibleDailyEntries] = useState(6)
+  const [visiblePeriodEntries, setVisiblePeriodEntries] = useState(4)
 
   useEffect(() => {
     setLocalPigs(pigs || [])
@@ -117,25 +119,25 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const getDailySumInPeriod = (startDate: string, endDate: string, targetPenId: string | null) => {
     const start = new Date(startDate)
     const end = new Date(endDate)
-    end.setDate(end.getDate() + 1) // inclusive end
+    end.setDate(end.getDate() + 1)
 
-    const filtered = dailyRecords.filter(r => {
+    const filtered = dailyRecords.filter((r: any) => {
       const ft = new Date(r.feeding_time)
       if (ft < start || ft >= end) return false
 
-      let recordPen = r.pen_id
+      let recordPen = r.pen_id ?? null
       if (!recordPen && r.pig_id) {
-        const pig = localPigs.find(p => p.pig_id === r.pig_id)
-        recordPen = pig ? pig.pen_id : null
+        const pig = localPigs.find((p: Pig) => p.pig_id === r.pig_id)
+        recordPen = pig ? pig.pen_id ?? null : null
       }
 
       return targetPenId === null ? true : recordPen === targetPenId
     })
 
     const sum: { total: number; feed_types: Record<string, number> } = { total: 0, feed_types: {} }
-    filtered.forEach(r => {
+    filtered.forEach((r: any) => {
       const feedType = r.feed_type || 'Unknown'
-      const amountInKg = toKg(parseFloat(r.amount || 0), r.unit || 'kg')
+      const amountInKg = toKg(parseFloat(String(r.amount ?? 0)), r.unit || 'kg')
       sum.feed_types[feedType] = (sum.feed_types[feedType] || 0) + amountInKg
       sum.total += amountInKg
     })
@@ -148,7 +150,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
       const date = new Date(r.feeding_time).toISOString().split('T')[0]
       if (!acc[date]) acc[date] = { date, feed_types: {}, total: 0 }
       const feedType = r.feed_type || 'Unknown'
-      const amountInKg = toKg(parseFloat(r.amount || 0), r.unit || 'kg')
+      const amountInKg = toKg(parseFloat(String(r.amount ?? 0)), r.unit || 'kg')
       acc[date].feed_types[feedType] = (acc[date].feed_types[feedType] || 0) + amountInKg
       acc[date].total += amountInKg
       return acc
@@ -196,7 +198,9 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const sortedDaily = Object.values(dailyAggregates).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
   const sortedWeekly = Object.values(weeklyAggregates).sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime())
   const sortedMonthly = Object.values(monthlyAggregates).sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime())
-
+  const visibleDailySummary = sortedDaily.slice(0, visibleDailyEntries)
+  const visibleWeeklySummary = sortedWeekly.slice(0, visiblePeriodEntries)
+  const visibleMonthlySummary = sortedMonthly.slice(0, visiblePeriodEntries)
 
   const refreshDailyRecords = () =>
     axios.get(`${utils.apiUrl}/feeding/record/farm/${user!.farm_id}?record_type=daily`, {
@@ -231,12 +235,30 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
       const added = resp?.data?.data ?? resp?.data
       if (added?.feeding_time) {
         if (added?.pig_id) {
-          setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id
-            ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } }
+          setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pig_id === added.pig_id
+            ? {
+                ...p,
+                feedingSchedule: {
+                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
+                  feedType: p.feedingSchedule?.feedType ?? '',
+                  times: p.feedingSchedule?.times ?? [],
+                  lastFed: added.feeding_time,
+                  specialDiet: p.feedingSchedule?.specialDiet,
+                },
+              }
             : p))
         } else if (added?.pen_id) {
-          setLocalPigs(prev => prev.map(p => p.pen_id === added.pen_id
-            ? { ...p, feedingSchedule: { ...(p.feedingSchedule || {}), lastFed: added.feeding_time } }
+          setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pen_id === added.pen_id
+            ? {
+                ...p,
+                feedingSchedule: {
+                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
+                  feedType: p.feedingSchedule?.feedType ?? '',
+                  times: p.feedingSchedule?.times ?? [],
+                  lastFed: added.feeding_time,
+                  specialDiet: p.feedingSchedule?.specialDiet,
+                },
+              }
             : p))
         }
       }
@@ -483,7 +505,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
                                 <SelectTrigger className="w-full"><SelectValue placeholder="Select pig" /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">None</SelectItem>
-                                  {localPigs?.map(p => <SelectItem key={p.pig_id} value={p.pig_id || ''}>{p.name || p.pig_id}</SelectItem>)}
+                                  {localPigs?.map(p => <SelectItem key={p.pig_id ?? `${p.name}-${p.pen_id}`} value={p.pig_id ?? ''}>{p.name || p.pig_id || 'Unnamed pig'}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </div>
