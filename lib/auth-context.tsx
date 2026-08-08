@@ -176,9 +176,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string, name: string, phone: string): Promise<AuthResponse> => {
+  const register = async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    privacyPolicyAccepted: boolean,
+    marketingConsent: boolean = false
+  ): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/register`, { email, password, name, phone });
+      const response = await axios.post(`${utils.apiUrl}/auth/register`, {
+        email,
+        password,
+        name,
+        phone,
+        privacy_policy_accepted: privacyPolicyAccepted,
+        marketing_consent: marketingConsent,
+      });
       if (response.status === 201) {
         router.push("/login");
         return { success: true, message: "Registration successful. Please log in." };
