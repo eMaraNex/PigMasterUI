@@ -68,14 +68,20 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 if (payment?.status === "success") {
                     stopPolling()
                     setStep("success")
-                    setTimeout(() => onSuccess(plan.id), 1500)
+                    setTimeout(() => {
+                        window.location.reload();
+                        onSuccess(plan.id);
+                    }, 1500)
                 } else if (payment?.status === "failed") {
                     // Only show failed if there's NO receipt — if there's a receipt,
                     // money was taken but activation failed, treat as success
                     if (payment?.metadata?.mpesa_receipt) {
                         stopPolling()
                         setStep("success")
-                        setTimeout(() => onSuccess(plan.id), 1500)
+                        setTimeout(() => {
+                            window.location.reload();
+                            onSuccess(plan.id);
+                        }, 1500)
                     } else {
                         stopPolling()
                         setStatusMessage(

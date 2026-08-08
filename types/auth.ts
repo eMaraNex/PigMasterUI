@@ -8,6 +8,9 @@ export interface User {
   name: string;
   farm_id?: string;
   role_id?: string;
+  subscription_start?: string;
+  subscription_end?: string;
+  subscription_plan?: string;
   email_verified?: boolean;
   avatar_url?: string;
   phone?: string;

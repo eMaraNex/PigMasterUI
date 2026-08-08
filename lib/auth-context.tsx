@@ -138,6 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: user?.name ?? "Farm Administrator",
           farm_id: user?.farm_id ?? "",
           role_id: user?.role_id ?? "",
+          subscription_start: user?.subscription_start ?? "",
+          subscription_end: user?.subscription_end ?? "",
+          subscription_plan: user?.subscription_plan ?? "",
           email_verified: user?.email_verified ?? false,
           avatar_url: user?.avatar_url ?? "",
           created_at: user?.created_at ?? ""
