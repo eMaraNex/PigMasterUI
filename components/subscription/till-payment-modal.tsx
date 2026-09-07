@@ -1,19 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import axios from 'axios'
+import { useState, useEffect, useRef } from "react"
+import axios from "axios"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MessageCircle, Loader2, Check, AlertCircle, Copy } from "lucide-react"
+import { Loader2, Check, AlertCircle, Smartphone } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as utils from "@/lib/utils"
 
-// Replace these with your real business details before going live.
-const TILL_NUMBER = "5570016"
-const BUSINESS_NAME = "Emaranex Enterprise"
-const WHATSAPP_NUMBER = "254711985548" // international format, no + or spaces
+const POLL_INTERVAL_MS = 4000
+const POLL_TIMEOUT_MS = 120_000 // 2 minutes
 
 interface TillPaymentModalProps {
     plan: {
@@ -26,74 +24,141 @@ interface TillPaymentModalProps {
     onClose: () => void
 }
 
+type Step = "form" | "waiting" | "success" | "failed"
+
 export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPaymentModalProps) {
-    const [step, setStep] = useState<"form" | "pending">("form")
+    const [step, setStep] = useState<Step>("form")
+    const [phoneNumber, setPhoneNumber] = useState("+254")
     const [submitting, setSubmitting] = useState(false)
-    const [accountName, setAccountName] = useState("")
-    const [mpesaCode, setMpesaCode] = useState("")
+    const [paymentId, setPaymentId] = useState<string | null>(null)
+    const [statusMessage, setStatusMessage] = useState("")
     const { toast } = useToast()
 
-    const isFormValid = accountName.trim().length > 0 && mpesaCode.trim().length > 0
+    const pollRef = useRef<NodeJS.Timeout | null>(null)
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-    const copyTillNumber = async () => {
-        try {
-            await navigator.clipboard.writeText(TILL_NUMBER)
-            toast({ title: "Till number copied" })
-        } catch {
-            // clipboard API can fail on non-secure contexts; fail silently, number is visible anyway
-        }
+    const isPhoneValid = /^\+2547\d{8}$/.test(phoneNumber) || /^\+2541\d{8}$/.test(phoneNumber)
+
+    // Compute amount + dates
+    const startDate = new Date()
+    const endDate = new Date(startDate)
+    if (plan.period === "yearly") {
+        endDate.setFullYear(endDate.getFullYear() + 1)
+    } else {
+        endDate.setMonth(endDate.getMonth() + 1)
+    }
+
+    const stopPolling = () => {
+        if (pollRef.current) clearInterval(pollRef.current)
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+
+    useEffect(() => () => stopPolling(), [])
+
+    const startPolling = (id: string) => {
+        const token = localStorage.getItem("pig_farm_token")
+
+        pollRef.current = setInterval(async () => {
+            try {
+                const res = await axios.get(`${utils.apiUrl}/payments/${id}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                const payment = res.data?.data
+
+                if (payment?.status === "success") {
+                    stopPolling()
+                    setStep("success")
+                    setTimeout(() => {
+                        window.location.reload();
+                        onSuccess(plan.id);
+                    }, 1500)
+                } else if (payment?.status === "failed") {
+                    // Only show failed if there's NO receipt — if there's a receipt,
+                    // money was taken but activation failed, treat as success
+                    if (payment?.metadata?.mpesa_receipt) {
+                        stopPolling()
+                        setStep("success")
+                        setTimeout(() => {
+                            window.location.reload();
+                            onSuccess(plan.id);
+                        }, 1500)
+                    } else {
+                        stopPolling()
+                        setStatusMessage(
+                            payment?.metadata?.callback_error || "Payment was declined or cancelled."
+                        )
+                        setStep("failed")
+                    }
+                }
+            } catch (err) {
+                console.warn("Poll error:", err)
+            }
+        }, POLL_INTERVAL_MS)
+
+        timeoutRef.current = setTimeout(() => {
+            stopPolling()
+            // Check the step via ref to avoid stale closure
+            setStep((current) => {
+                if (current === "waiting") {
+                    setStatusMessage("Payment timed out. Please try again.")
+                    return "failed"
+                }
+                return current
+            })
+        }, POLL_TIMEOUT_MS)
     }
 
     const handleSubmit = async () => {
-        if (!isFormValid) return
+        if (!isPhoneValid) return
         setSubmitting(true)
+
         try {
             const token = localStorage.getItem("pig_farm_token")
+            const normalizedPhone = phoneNumber.replace("+", "") // 254...
 
-            // Log the pending manual payment so it shows up in your admin/verification queue.
-            // Requires a backend endpoint that accepts this shape — adjust the path/payload to match yours.
-            // await axios.post(
-            //     `${utils.apiUrl}/payments/manual`,
-            //     {
-            //         plan: plan.id,
-            //         tier: plan.name,
-            //         amount: plan.price,
-            //         currency: "USD",
-            //         payment_mode: "till",
-            //         status: "pending_verification",
-            //         metadata: {
-            //             account_name: accountName,
-            //             mpesa_code: mpesaCode,
-            //             till_number: TILL_NUMBER,
-            //         },
-            //     },
-            //     { headers: { Authorization: `Bearer ${token}` } }
-            // )
+            const payload = {
+                plan: plan.id,
+                amount: plan.price,
+                currency: "KES",
+                payment_mode: "mpesa",
+                phone_number: normalizedPhone,
+                tier: plan.name,
+                metadata: {
+                    plan_period: plan.period === "yearly" ? "yearly" : "monthly", // ← fix here
+                    initiated_from: "till_modal",
+                    duration: plan.period === "yearly" ? "1 year" : "1 month",
+                    subscription_startdate: startDate.toISOString().split("T")[0],
+                    subscription_enddate: endDate.toISOString().split("T")[0],
+                    original_amount: plan.price,
+                    original_currency: "USD",
+                },
+            }
 
-            const message =
-                `Hi, I just paid for the ${plan.name} plan ($${plan.price.toFixed(2)}).\n` +
-                `Name/email: ${accountName}\n` +
-                `M-Pesa code: ${mpesaCode}`
-            const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`
-            window.open(whatsappUrl, "_blank")
-
-            setStep("pending")
-        } catch (error) {
-            console.error("Manual payment log error:", error)
-            const errorMessage = error instanceof Error ? error.message : "Couldn't log your payment"
-            toast({
-                variant: "destructive",
-                title: "Something went wrong",
-                description: errorMessage,
-                action: <Button size="sm" onClick={() => setSubmitting(false)}>Retry</Button>,
+            const res = await axios.post(`${utils.apiUrl}/payments`, payload, {
+                headers: { Authorization: `Bearer ${token}` },
             })
+
+            const created = res.data?.data
+            if (!created?.id) throw new Error("No payment ID returned from server")
+
+            setPaymentId(created.id)
+            setStep("waiting")
+            startPolling(created.id)
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Could not initiate payment"
+            toast({ variant: "destructive", title: "Payment error", description: msg })
         } finally {
             setSubmitting(false)
         }
     }
 
+    const handleClose = () => {
+        stopPolling()
+        onClose()
+    }
+
     return (
-        <Dialog open={true} onOpenChange={onClose}>
+        <Dialog open onOpenChange={handleClose}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle className="text-center">Pay with M-Pesa</DialogTitle>
@@ -105,95 +170,90 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                     </div>
                 </DialogHeader>
 
-                {step === "form" ? (
+                {/* ── FORM ── */}
+                {step === "form" && (
                     <div className="space-y-4">
-                        <div className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-lg space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500">Till number</span>
-                                <button
-                                    onClick={copyTillNumber}
-                                    className="flex items-center gap-1 text-sm font-semibold tracking-wide"
-                                >
-                                    {TILL_NUMBER}
-                                    <Copy className="h-3 w-3 text-gray-400" />
-                                </button>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500">Business name</span>
-                                <span className="text-sm font-medium">{BUSINESS_NAME}</span>
-                            </div>
-                        </div>
-
-                        <ol className="text-sm text-gray-500 list-decimal pl-5 space-y-1">
-                            <li>Go to the M-Pesa menu</li>
-                            <li>Select Lipa na M-Pesa, then Buy goods</li>
-                            <li>Enter the till number and amount</li>
-                            <li>Enter your PIN to confirm</li>
-                        </ol>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="accountName">Your name or account email</Label>
-                            <Input
-                                id="accountName"
-                                placeholder="Jane Wanjiru"
-                                value={accountName}
-                                onChange={(e) => setAccountName(e.target.value)}
-                            />
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/40 rounded-lg text-sm text-gray-500">
+                            Enter your Safaricom number and we'll send you an M-Pesa prompt to complete the payment.
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="mpesaCode">M-Pesa confirmation code</Label>
+                            <Label htmlFor="phone">M-Pesa phone number</Label>
                             <Input
-                                id="mpesaCode"
-                                placeholder="QGH7X9K2LM"
-                                value={mpesaCode}
-                                onChange={(e) => setMpesaCode(e.target.value.toUpperCase())}
+                                id="phone"
+                                placeholder="+254 7XX XXX XXX"
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value.trim())}
                             />
-                            {!isFormValid && (accountName || mpesaCode) && (
+                            {phoneNumber.length > 4 && !isPhoneValid && (
                                 <div className="flex items-center text-red-500 text-xs">
                                     <AlertCircle className="h-3 w-3 mr-1" />
-                                    Both fields are required
+                                    Enter a valid Kenyan number (+2547… or +2541…)
                                 </div>
                             )}
                         </div>
 
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={submitting || !isFormValid}
-                            className="w-full"
-                        >
+                        <Button onClick={handleSubmit} disabled={submitting || !isPhoneValid} className="w-full">
                             {submitting ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Sending...
+                                    Sending prompt…
                                 </>
                             ) : (
                                 <>
-                                    <MessageCircle className="mr-2 h-4 w-4" />
-                                    Send confirmation via WhatsApp
+                                    <Smartphone className="mr-2 h-4 w-4" />
+                                    Send M-Pesa prompt
                                 </>
                             )}
                         </Button>
 
                         <p className="text-center text-xs text-gray-500">
-                            We'll activate your account once we verify the payment.
+                            Your plan will activate automatically once payment is confirmed.
                         </p>
                     </div>
-                ) : (
-                    <div className="text-center space-y-4 py-4">
+                )}
+
+                {/* ── WAITING ── */}
+                {step === "waiting" && (
+                    <div className="text-center space-y-4 py-6">
+                        <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
+                        <p className="font-semibold">Waiting for payment…</p>
+                        <p className="text-sm text-gray-500">
+                            Check your phone for the M-Pesa prompt and enter your PIN to confirm.
+                        </p>
+                        <Button variant="outline" className="w-full" onClick={handleClose}>
+                            Cancel
+                        </Button>
+                    </div>
+                )}
+
+                {/* ── SUCCESS ── */}
+                {step === "success" && (
+                    <div className="text-center space-y-4 py-6">
                         <div className="mx-auto w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                             <Check className="h-6 w-6 text-green-600" />
                         </div>
-                        <div>
-                            <p className="font-semibold">Sent for verification</p>
-                            <p className="text-sm text-gray-500 mt-1">
-                                We've received your confirmation code. Your {plan.name} plan will be activated
-                                shortly after we verify the payment.
-                            </p>
+                        <p className="font-semibold">Payment confirmed!</p>
+                        <p className="text-sm text-gray-500">Your {plan.name} plan is now active.</p>
+                    </div>
+                )}
+
+                {/* ── FAILED ── */}
+                {step === "failed" && (
+                    <div className="text-center space-y-4 py-6">
+                        <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                            <AlertCircle className="h-6 w-6 text-red-600" />
                         </div>
-                        <Button variant="outline" className="w-full" onClick={() => onSuccess(plan.id)}>
-                            Close
-                        </Button>
+                        <p className="font-semibold">Payment failed</p>
+                        <p className="text-sm text-gray-500">{statusMessage}</p>
+                        <div className="flex gap-2">
+                            <Button variant="outline" className="flex-1" onClick={handleClose}>
+                                Close
+                            </Button>
+                            <Button className="flex-1" onClick={() => setStep("form")}>
+                                Try again
+                            </Button>
+                        </div>
                     </div>
                 )}
             </DialogContent>

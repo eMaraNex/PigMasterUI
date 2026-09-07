@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import * as utils from "./utils";
 import { AuthContextType, AuthResponse, User } from "@/types";
 import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, googleProvider, firebaseConfigured } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Cookies from "js-cookie";
 
@@ -15,7 +15,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false); 
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   // Function to decode JWT and check expiration
@@ -93,7 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       );
 
-      setIsInitialized(true); 
+      setIsInitialized(true);
+      setIsLoading(false);
 
       // Cleanup interceptor on unmount
       return () => {
@@ -138,6 +140,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: user?.name ?? "Farm Administrator",
           farm_id: user?.farm_id ?? "",
           role_id: user?.role_id ?? "",
+          subscription_start: user?.subscription_start ?? "",
+          subscription_end: user?.subscription_end ?? "",
+          subscription_plan: user?.subscription_plan ?? "",
           email_verified: user?.email_verified ?? false,
           avatar_url: user?.avatar_url ?? "",
           created_at: user?.created_at ?? ""
@@ -173,9 +178,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string, name: string, phone: string): Promise<AuthResponse> => {
+  const register = async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    privacyPolicyAccepted: boolean = false,
+    marketingConsent: boolean = false
+  ): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/register`, { email, password, name, phone });
+      const response = await axios.post(`${utils.apiUrl}/auth/register`, {
+        email,
+        password,
+        name,
+        phone,
+        privacy_policy_accepted: privacyPolicyAccepted,
+        marketing_consent: marketingConsent,
+      });
       if (response.status === 201) {
         router.push("/login");
         return { success: true, message: "Registration successful. Please log in." };
@@ -261,6 +280,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const googleAuth = async (): Promise<AuthResponse> => {
+      if (!firebaseConfigured || !auth || !googleProvider) {
+          return { success: false, message: "Google sign-in is not configured yet. Please set the Firebase environment variables first." };
+      }
+
       try {
           const result = await signInWithPopup(auth, googleProvider);
           const user = result.user;
@@ -331,7 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, forgotPassword, resetPassword, googleAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, forgotPassword, resetPassword, googleAuth }}>
       {children}
     </AuthContext.Provider>
   );

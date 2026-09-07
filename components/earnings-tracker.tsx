@@ -165,7 +165,7 @@ export default function EarningsTracker() {
     loadEarnings({ date_from, date_to });
   }, [dateFilter, customDateRange, user?.farm_id]);
 
-  const loadEarnings = async (filters = {}) => {
+  const loadEarnings = async (filters: { date_from?: string; date_to?: string } = {}) => {
     try {
       const token = localStorage.getItem("pig_farm_token");
       if (!token) {

@@ -55,6 +55,8 @@ export default function RegisterPage() {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState<boolean>(false);
+  const [marketingConsent, setMarketingConsent] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -142,13 +144,20 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!privacyAccepted) {
+      showError('Consent required', 'You must accept the privacy policy before creating an account.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await register(
         formData.email,
         formData.password,
         formData.name,
-        formData.phone
+        formData.phone,
+        privacyAccepted,
+        marketingConsent
       );
       showSuccess('Success', response.message);
       if (response.success) {
@@ -202,7 +211,7 @@ export default function RegisterPage() {
   const isFormValid = (): boolean => {
     const hasErrors = Object.keys(errors).length > 0;
     const hasEmptyFields = !formData.email || !formData.password || !formData.confirmPassword || !formData.name || !formData.phone;
-    return !hasErrors && !hasEmptyFields;
+    return !hasErrors && !hasEmptyFields && privacyAccepted;
   };
 
   return (
@@ -407,6 +416,29 @@ export default function RegisterPage() {
                   <p className="text-green-500 text-sm mt-1">Passwords match!</p>
                 )}
               </div>
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={privacyAccepted}
+                    onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                  />
+                  <span>
+                    I agree to the <Link href="/privacy-policy" className="font-medium text-blue-600 underline underline-offset-2 dark:text-blue-400">Privacy Policy</Link> and consent to the processing of my data for account operation, service analysis, and marketing communications as described in the policy.
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={marketingConsent}
+                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                  />
+                  <span>I am happy to receive product updates, promotions, and farm insights via email or SMS.</span>
+                </label>
+              </div>
+
               <div className="flex justify-between">
                 <button
                   type="button"
