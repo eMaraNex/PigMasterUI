@@ -77,11 +77,11 @@ export function isBreedingReady(pig: any): boolean {
     return ageInMonths >= 6;
   }
 }
-const normalizeUrl = (url: any) => url.replace(/\/$/, "");
+const normalizeUrl = (url: string | undefined) => (url ?? "").replace(/\/$/, "");
 
 export const baseUrl =
   process.env.NODE_ENV === "production"
-    ? process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL ?? ""
     : "http://localhost:5000";
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
