@@ -163,6 +163,7 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
                 description: `Transaction ID: ${data.data?.transaction_id || 'N/A'}` 
             })
 
+            window.location.reload()
             onSuccess(plan.id)
         } catch (error) {
             console.error('Payment error:', error)
