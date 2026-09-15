@@ -24,7 +24,7 @@ export default function UserProfile() {
         name: user?.name || "",
         email: user?.email || "",
         phone: user?.phone || "",
-        avatar: user?.avatar || "",
+        avatar: user?.avatar || user?.avatar_url || "",
     })
 
     // Password form state

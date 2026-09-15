@@ -93,6 +93,7 @@ function PricingContent() {
         upgradeTo(planId as any)
         setShowPayment(false)
         setSelectedPlan(null)
+        window.location.reload()
     }
 
     return (
