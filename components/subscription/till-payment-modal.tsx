@@ -56,12 +56,10 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     useEffect(() => () => stopPolling(), [])
 
     const startPolling = (id: string) => {
-        const token = localStorage.getItem("pig_farm_token")
-
         pollRef.current = setInterval(async () => {
             try {
                 const res = await axios.get(`${utils.apiUrl}/payments/${id}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                    withCredentials: true,
                 })
                 const payment = res.data?.data
 
@@ -113,30 +111,33 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
         setSubmitting(true)
 
         try {
-            const token = localStorage.getItem("pig_farm_token")
             const normalizedPhone = phoneNumber.replace("+", "") // 254...
+            const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
+                params: { plan: plan.id, period: plan.period === "yearly" ? "yearly" : "monthly" },
+                withCredentials: true,
+            })
+            const quote = quoteResponse.data?.data
+            if (!quote || typeof quote.amount !== "number" || !quote.currency) {
+                throw new Error("The server returned an invalid payment quote.")
+            }
 
             const payload = {
                 plan: plan.id,
-                amount: plan.price,
-                currency: "KES",
+                amount: quote.amount,
+                currency: quote.currency,
                 payment_mode: "mpesa",
                 phone_number: normalizedPhone,
                 tier: plan.name,
                 metadata: {
                     plan_period: plan.period === "yearly" ? "yearly" : "monthly", // ← fix here
                     initiated_from: "till_modal",
-                    duration: plan.period === "yearly" ? "1 year" : "1 month",
                     subscription_startdate: startDate.toISOString().split("T")[0],
                     subscription_enddate: endDate.toISOString().split("T")[0],
-                    original_amount: plan.price,
-                    original_currency: "USD",
+                    duration_months: quote.durationMonths,
                 },
             }
 
-            const res = await axios.post(`${utils.apiUrl}/payments`, payload, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
+            const res = await axios.post(`${utils.apiUrl}/payments`, payload, { withCredentials: true })
 
             const created = res.data?.data
             if (!created?.id) throw new Error("No payment ID returned from server")

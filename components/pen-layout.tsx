@@ -49,22 +49,15 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
 
   const handleDeleteRow = async (rowId: string, rowName: string) => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       if (!user?.farm_id) throw new Error("Farm ID missing");
 
       const data = await axios.delete(`${utils.apiUrl}/rows/delete/${user.farm_id}/${rowId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
 
       if (data) {
         showSuccess("Success", `Row ${rowName} deleted successfully!`);
-        const rowsString = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
-        if (rowsString) {
-          const currentRows = JSON.parse(rowsString);
-          const updatedRows = currentRows.filter((row: any) => row.id !== rowId);
-          localStorage.setItem(`pig_farm_rows_${user.farm_id}`, JSON.stringify(updatedRows));
-        }
       }
 
       if (selectedPen && pens.find(h => h.row_name === rowName && h.name === selectedPen)) {
@@ -107,20 +100,17 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
 
   const getRemovalHistory = useCallback(async (penId: string) => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      const cachedUser = JSON.parse(localStorage.getItem("pig_farm_user") || "{}");
-      const farmId = user?.farm_id ?? cachedUser?.farm_id;
-      if (!farmId || !token) {
+      const farmId = user?.farm_id;
+      if (!farmId) {
         showError('Error', 'Authentication required.')
         return [];
       }
 
       const response = await axios.get(`${utils.apiUrl}/pens/${farmId}/${penId}/history`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
       const newRemovalRecords = response.data?.data || [];
       const filteredRecords = newRemovalRecords.filter((record: any) => record.pen_id === penId && record.removed_at !== null);
-      localStorage.setItem("pig_farm_pig_removals", JSON.stringify(filteredRecords));
       return filteredRecords;
     } catch (error) {
       showError('Error', 'Error fetching removal history. Please try again later.')
@@ -195,8 +185,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         return;
       }
 
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       const response = await axios.post(
         `${utils.apiUrl}/rows/expand`,
         {
@@ -205,7 +194,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
           farm_id: user?.farm_id,
           additionalCapacity: additionalCapacity,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { }
       );
 
       if (response.data.success) {
@@ -241,10 +230,9 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         is_occupied: false,
         is_deleted: 0,
       };
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       await axios.post(`${utils.apiUrl}/pens/${user?.farm_id}`, newPen, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
       showSuccess('Success', `Pen ${penName} added successfully!`)
       setAddPenOpen(false);
@@ -262,10 +250,9 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         showWarn('Warn', "Cannot remove pen with pigs. Please remove pigs first.")
         return;
       }
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       await axios.delete(`${utils.apiUrl}/pens/${user?.farm_id}/${pen.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
       showSuccess('Success', `Pen ${pen.name} removed successfully!`);
       setRemovePenOpen(false);

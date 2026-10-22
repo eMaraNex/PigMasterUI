@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import PigList from "@/components/pig-list";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -9,17 +9,6 @@ import { ArrowLeft } from "lucide-react";
 export default function PigsPage() {
     const { user } = useAuth();
     const router = useRouter();
-    const [farmId, setFarmId] = useState<string>("");
-
-    // Fetch farmId from localStorage only on the client
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            const farmIdRaw = localStorage.getItem('pig_farm_id');
-            const farmId = farmIdRaw || user?.farm_id || '';
-            setFarmId(farmId);
-        }
-    }, [user]);
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4 sm:p-6">
             <Button
@@ -30,7 +19,7 @@ export default function PigsPage() {
                 <ArrowLeft className="w-4 h-4" />
                 Back to Dashboard
             </Button>
-            {farmId && <PigList farmId={farmId} />}
+            {user?.farm_id && <PigList farmId={user.farm_id} />}
         </div>
     );
 }

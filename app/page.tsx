@@ -42,6 +42,9 @@ import SkeletonDashboard from "@/components/skeletons/dashboard/skeleton";
 import ClientHeaderWrapper from "@/components/ClientHeaderWrapper";
 import { useSubscription } from "@/lib/subscription-context";
 import UpgradePrompt from "@/components/shared/upgradeprompt";
+import { useAppDispatch } from "@/lib/redux/hooks";
+import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
+import { api } from "@/lib/redux/api";
 
 const DashboardContent: React.FC = () => {
   const { user, logout } = useAuth();
@@ -62,20 +65,7 @@ const DashboardContent: React.FC = () => {
   const [showMandatoryRowModal, setShowMandatoryRowModal] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState<boolean>(false);
 
-  const tempFarmId = localStorage.getItem("pig_farm_id");
-  let farmId;
-  try {
-    farmId = tempFarmId ? JSON.parse(tempFarmId) : null;
-  } catch (e) {
-    farmId = tempFarmId;
-  }
-  const finalFarmId =
-    farmId && typeof farmId === "object" ? farmId.farmId : farmId;
-
-  // Set hasFarm to true only if finalFarmId is a non-empty string
-  const [hasFarm, setHasFarm] = useState<boolean>(
-    !!finalFarmId && finalFarmId !== ""
-  );
+  const hasFarm = Boolean(user?.farm_id);
   const hasRow = rows?.length > 0;
   const [breedingRefreshTrigger, setBreedingRefreshTrigger] =
     useState<number>(0);
@@ -85,14 +75,16 @@ const DashboardContent: React.FC = () => {
   const tabsListRef = useRef<HTMLDivElement>(null);
   const notifiedPigsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const handleAddRow = () => {
     setAddRowOpen(true);
     setShowMandatoryRowModal(false);
   }
 
-  const cachedFarmDetails = localStorage.getItem(`pig_farm_data`);
-  const farmDetails = cachedFarmDetails ? JSON.parse(cachedFarmDetails) : [];
+  useEffect(() => {
+    dispatch(setSelectedFarmId(user?.farm_id || null));
+  }, [dispatch, user?.farm_id]);
 
   useEffect(() => {
     if (hasFarm && dataLoaded && rows.length === 0) {
@@ -124,32 +116,6 @@ const DashboardContent: React.FC = () => {
     return transformedEvents;
   }
 
-  const loadFromStorage = useCallback((farmId: string) => {
-    try {
-      const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`);
-      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`);
-      const cachedPigs = localStorage.getItem(`pig_farm_pigs_${farmId}`);
-      return {
-        rows: cachedRows ? JSON.parse(cachedRows) : [],
-        pens: cachedPens ? JSON.parse(cachedPens) : [],
-        pigs: cachedPigs ? JSON.parse(cachedPigs) : [],
-      };
-    } catch (error) {
-      console.error("Error loading from storage:", error);
-      return { rows: [], pens: [], pigs: [] };
-    }
-  }, []);
-
-  const saveToStorage = useCallback((farmId: string, data: { rows: any[]; pens: any[]; pigs: any[] }) => {
-    try {
-      localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows));
-      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens));
-      localStorage.setItem(`pig_farm_pigs_${farmId}`, JSON.stringify(data.pigs));
-    } catch (error) {
-      console.error("Error saving to storage:", error);
-    }
-  }, [])
-
   const loadData = useCallback(async () => {
     if (!user?.farm_id) {
       setDataLoaded(true);
@@ -159,44 +125,16 @@ const DashboardContent: React.FC = () => {
 
     setIsLoading(true);
 
-    const cachedData = loadFromStorage(user.farm_id)
-    if (cachedData.rows.length || cachedData.pens.length || cachedData.pigs.length) {
-      setRows(cachedData.rows);
-      setPens(cachedData.pens);
-      setPigs(cachedData.pigs);
-      setDataLoaded(true);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const token = localStorage.getItem("pig_farm_token")
-      if (!token) {
-        console.warn("No authentication token found")
-        setDataLoaded(true);
-        setIsLoading(false);
-        return;
-      }
-
-      const [rowsResponse, pensResponse, pigsResponse, alertsResponse, calenderResponse] = await Promise.all([
-        axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/alerts/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/alerts/calendar/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const farmKey = user.farm_id;
+      const [newRows, newPens, pigsResponse, serverAlertsResponse, calendarResponse] = await Promise.all([
+        dispatch(api.endpoints.getRows.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
+        dispatch(api.endpoints.getPens.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
+        dispatch(api.endpoints.getPigs.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
+        dispatch(api.endpoints.getFarmAlerts.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
+        dispatch(api.endpoints.getFarmCalendar.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
       ]);
-
-      let newPigs = pigsResponse.data.data || [];
+      let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
         ...r,
         expected_birth_date:
@@ -208,10 +146,8 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const newRows = rowsResponse.data.data || [];
-      const newPens = pensResponse.data.data || [];
-      const calendarAlerts = calenderResponse.data.data || [];
-      const serverAlerts: ServerAlert[] = alertsResponse.data.data || [];
+      const calendarAlerts = calendarResponse as AlertCalendar[] || [];
+      const serverAlerts: ServerAlert[] = serverAlertsResponse as ServerAlert[] || [];
 
       const mappedAlerts: Alert[] = serverAlerts.map((alert) => ({
         type:
@@ -229,11 +165,6 @@ const DashboardContent: React.FC = () => {
       setPigs(newPigs);
       setAlerts(mappedAlerts);
       setCalendarEvents(calendarAlerts);
-      saveToStorage(user.farm_id, {
-        rows: newRows,
-        pens: newPens,
-        pigs: newPigs,
-      });
       setDataLoaded(true);
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -242,26 +173,19 @@ const DashboardContent: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.farm_id, loadFromStorage, saveToStorage, showError])
+  }, [dispatch, user?.farm_id, showError])
 
   // Refresh only pigs and pens after transfer
   const refreshPigsAndPens = useCallback(async () => {
     if (!user?.farm_id) return;
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) return;
-
-      const [pensResponse, pigsResponse] = await Promise.all([
-        axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const [newPens, pigsResponse] = await Promise.all([
+        dispatch(api.endpoints.getPens.initiate(user.farm_id, { forceRefetch: true, subscribe: false })).unwrap(),
+        dispatch(api.endpoints.getPigs.initiate(user.farm_id, { forceRefetch: true, subscribe: false })).unwrap(),
       ]);
 
-      let newPigs = pigsResponse.data.data || [];
+      let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
         ...r,
         expected_birth_date:
@@ -273,28 +197,21 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const newPens = pensResponse.data.data || [];
-
       // Update state
       setPens(newPens);
       setPigs(newPigs);
 
-      // Update localStorage
-      saveToStorage(user.farm_id, { rows, pens: newPens, pigs: newPigs });
     } catch (error) {
       console.error("Error refreshing pigs and pens:", error);
     }
-  }, [user?.farm_id, saveToStorage, rows]);
+  }, [dispatch, user?.farm_id]);
 
   const handlePigsUpdate = useCallback(
     (updatedPigs: PigType[]) => {
       setPigs(updatedPigs);
-      if (user?.farm_id) {
-        saveToStorage(user.farm_id, { rows, pens, pigs: updatedPigs });
-      }
       setBreedingRefreshTrigger((prev) => prev + 1);
     },
-    [user, rows, pens, saveToStorage],
+    [],
   );
 
   //Check this later if condition necessary
@@ -331,24 +248,16 @@ const DashboardContent: React.FC = () => {
     }
   }, [activeTab]);
 
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setHasFarm(!!farmId || !!user?.farm_id);
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [user, farmId]);
-
   const handleRowAdded = useCallback(() => {
     setDataLoaded(false);
     loadData();
   }, [loadData]);
 
   const handleFarmCreated = useCallback(() => {
-    setHasFarm(true);
+    dispatch(api.util.invalidateTags(["CurrentUser", "Farm"]));
     setDataLoaded(false);
     loadData();
-  }, [loadData]);
+  }, [dispatch, loadData]);
 
   const handleRowCreated = useCallback(() => {
     setDataLoaded(false);

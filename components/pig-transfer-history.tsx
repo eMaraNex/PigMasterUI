@@ -86,18 +86,10 @@ export default function PigTransferHistory({
       setError(null);
 
       try {
-        const token = localStorage.getItem("pig_farm_token");
-        if (!token) {
-          throw new Error("No authentication token found");
-        }
 
         const response = await axios.get(
           `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer-history`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+          { withCredentials: true }
         );
 
         if (response.data.success) {

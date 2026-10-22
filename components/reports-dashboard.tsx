@@ -28,17 +28,13 @@ export default function ReportsDashboard({ pens }: ReportsProps) {
 
   const loadData = async () => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        throw new Error("No authentication token found");
-      }
 
       const [pigsResponse, earningsResponse] = await Promise.all([
         axios.get(`${utils.apiUrl}/pigs/${user?.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          
         }),
         axios.get(`${utils.apiUrl}/earnings/${user?.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          
         }),
       ]);
 

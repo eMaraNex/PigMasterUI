@@ -36,8 +36,7 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
    
     try {
       const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` }
-      })
+        })
       const records = response?.data?.data ?? response?.data
       setPigRecords(Array.isArray(records) ? records : [])
     } catch (err: any) {
@@ -61,36 +60,14 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
       }
       setLoading(true);
       try {
-        const token = localStorage.getItem("pig_farm_token");
-        if (!token) {
-          showError('Error', "No authentication token found")
-        }
-
-        // Try localStorage first
-        const cachedPigs = localStorage.getItem(`pig_farm_pigs_${user.farm_id}`);
-        if (cachedPigs) {
-          const pigs: PigType[] = JSON.parse(cachedPigs);
-          const cachedPig = pigs.find((r: PigType) => r.id === pig.id);
-          if (cachedPig) {
-            setPigData(cachedPig);
-            setLoading(false);
-            loadPens();
-            return;
-          }
-        }
-
         // Fetch from API
         const response = await axios.get(`${utils.apiUrl}/pigs/${pig.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          
           params: { farm_id: user.farm_id },
         });
 
         if (response.data.success) {
           setPigData(response.data.data);
-          // Update localStorage
-          const cachedPigs = JSON.parse(localStorage.getItem(`pig_farm_pigs_${user.farm_id}`) || "[]") as PigType[];
-          const updatedPigs = cachedPigs.filter((r: PigType) => r.id !== pig.id).concat(response.data.data);
-          localStorage.setItem(`pig_farm_pigs_${user.farm_id}`, JSON.stringify(updatedPigs));
           loadPens();
         } else {
           showError('Error', "Failed to fetch pig data")
@@ -110,19 +87,11 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
 
   const loadPens = async () => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token || !user?.farm_id) return;
-
-      // Try localStorage first
-      const cachedPens = localStorage.getItem(`pig_farm_pens_${user.farm_id}`);
-      if (cachedPens) {
-        setPens(JSON.parse(cachedPens));
-        return;
-      }
+      if (!user?.farm_id) return;
 
       // Fetch from API
       const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
 
       if (response.data.success) {

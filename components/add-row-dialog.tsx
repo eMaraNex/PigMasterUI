@@ -15,9 +15,12 @@ import type { Row, Pen } from "@/types";
 import { AddRowDialogProps } from "@/types";
 import { planetNames } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
+import { api } from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
 
 export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: AddRowDialogProps) {
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
   const [isFarmModalOpen, setIsFarmModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -32,37 +35,16 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { showSuccess, showError, showWarn } = useToast();
   const isEditing = !!rowToEdit;
+  const farmId = user?.farm_id;
 
-  const loadFromStorage = (farmId: string) => {
-    try {
-      const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`);
-      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`);
-      return {
-        rows: cachedRows ? JSON.parse(cachedRows) : [],
-        pens: cachedPens ? JSON.parse(cachedPens) : [],
-      };
-    } catch (error) {
-      showError('Error', 'Failed to load cached data.');
-      return { rows: [], pens: [] };
-    }
-  };
   const getValidLevels = (capacity: number) => {
     const possibleLevels = [1, 2, 3, 4, 5, 6];
     return possibleLevels.filter(level => capacity % level === 0);
   };
 
 
-  const saveToStorage = (farmId: string, data: { rows: Row[]; pens: Pen[] }) => {
-    try {
-      localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows));
-      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens));
-    } catch (error) {
-      showError('Error', "Failed to save data to storage.");
-    }
-  };
-
   useEffect(() => {
-    if (!open || !user?.farm_id) return;
+    if (!open || !farmId) return;
 
     // Pre-fill form for editing
     if (isEditing && rowToEdit) {
@@ -80,40 +62,28 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
       setCustomCapacity("");
     }
 
-    const cachedData = loadFromStorage(user.farm_id);
-    if (cachedData.rows.length || cachedData.pens.length) {
-      setExistingRows(cachedData.rows);
-      setExistingPens(cachedData.pens);
-    }
 
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("pig_farm_token");
-        if (!token) throw new Error("Authentication token missing");
 
-        const [rowsResponse, pensResponse] = await Promise.all([
-          axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [newRows, newPens] = await Promise.all([
+          dispatch(api.endpoints.getRows.initiate(
+            farmId,
+            { forceRefetch: true, subscribe: false },
+          )).unwrap(),
+          dispatch(api.endpoints.getPens.initiate(
+            farmId,
+            { forceRefetch: true, subscribe: false },
+          )).unwrap(),
         ]);
-        const newRows: Row[] = rowsResponse.data.data || [];
-        const newPens: Pen[] = pensResponse.data.data || [];
         setExistingRows(newRows);
         setExistingPens(newPens);
-        saveToStorage(user.farm_id ?? '', { rows: newRows, pens: newPens });
       } catch (error) {
-        showError('Error', "Failed to fetch rows or pens. Using cached data.");
-        if (cachedData.rows.length || cachedData.pens.length) {
-          setExistingRows(cachedData.rows);
-          setExistingPens(cachedData.pens);
-        }
+        showError('Error', "Failed to fetch rows or pens.");
       }
     };
     fetchData();
-  }, [open, user, isEditing, rowToEdit]);
+  }, [dispatch, open, farmId, isEditing, rowToEdit, showError]);
 
   const getNextPlanetName = () => {
     const usedNames = existingRows.map((row) => row.name);
@@ -175,7 +145,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const farmId = localStorage.getItem("pig_farm_id");
+    const farmId = user?.farm_id;
     if (!farmId) {
       setIsFarmModalOpen(true);
       return;
@@ -194,8 +164,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
       const newRowName = formData.name.trim() || getNextPlanetName();
       const capacity = formData.capacity === "other" ? parseInt(customCapacity) : parseInt(formData.capacity);
       const numLevels = parseInt(formData.levels);
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+
+      if (!user?.farm_id) throw new Error("Farm ID missing");
 
       if (isEditing && rowToEdit) {
         // Edit mode: Update existing row
@@ -209,7 +179,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         const response = await axios.put(
           `${utils.apiUrl}/rows/update/${user.farm_id}/${rowToEdit.id}`,
           updatedRow,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { }
         );
 
         if (!response.data.success) {
@@ -253,7 +223,6 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
           ...currentPens.filter(h => newDistribution[h.level] >= h.position),
           ...newPens
         ];
-        saveToStorage(user.farm_id, { rows: updatedRows, pens: updatedPens });
         setExistingRows(updatedRows);
         setExistingPens(updatedPens);
 
@@ -277,7 +246,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         };
 
         const response = await axios.post(`${utils.apiUrl}/rows/create/${user.farm_id}`, newRow, {
-          headers: { Authorization: `Bearer ${token}` },
+          
         });
 
         if (!response.data.success) {
@@ -286,7 +255,6 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         const newPens: Pen[] = response?.data?.data?.pens ?? [];
         const updatedRows = [...existingRows, response?.data?.data?.rows];
         const updatedPens = [...existingPens, ...newPens];
-        saveToStorage(user.farm_id, { rows: updatedRows, pens: updatedPens });
         setExistingRows(updatedRows);
         setExistingPens(updatedPens);
         showSuccess('Success', `Successfully created row "${newRowName}" with ${capacity} pens across ${numLevels} levels!`);
@@ -294,6 +262,10 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
 
       setFormData({ name: "", description: "", capacity: "6", levels: "3" });
       setCustomCapacity("");
+      dispatch(api.util.invalidateTags([
+        { type: "Rows", id: user.farm_id },
+        { type: "Pens", id: user.farm_id },
+      ]));
       onClose();
       if (onRowAdded) {
         onRowAdded();

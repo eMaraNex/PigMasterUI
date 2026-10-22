@@ -75,8 +75,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     setLoadingRecords(true)
     try {
       const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` }
-      })
+        })
       const records = response?.data?.data ?? response?.data
       setPigRecords(Array.isArray(records) ? records : [])
     } catch (err: any) {
@@ -91,7 +90,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     try {
       const resp = await axios.delete(
         `${utils.apiUrl}/health/${recordId}`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+        { }
       )
       const deleted = resp?.data?.data ?? resp?.data
       setLocalPigs(prev => prev.map(p => ({
@@ -110,7 +109,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
       const resp = await axios.put(
         `${utils.apiUrl}/health/${recordId}`,
         { status: 'completed' },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
+        { }
       )
       const updated = resp?.data?.data ?? resp?.data
       setLocalPigs(prev => prev.map(p => ({
@@ -222,7 +221,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                             const overdue = healthRecords.filter((record) => record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
                             const updatedRecords = [] as any[]
                             for (const r of overdue) {
-                              const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                              const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { })
                               const updated = resp?.data?.data ?? resp?.data
                               updatedRecords.push(updated)
                             }
@@ -294,8 +293,8 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                                   Due {new Date(record.nextDue!).toLocaleDateString()}
                                 </span>
                                 <div className="ml-2 flex items-center space-x-2">
-                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
-                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
+                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
+                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
                                 </div>
                               </div>
                             ))}
@@ -338,7 +337,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                   e.preventDefault();
                   if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
                   try {
-                    const resp = await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
+                    const resp = await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { })
                     const added = resp?.data?.data ?? resp?.data
                     // add record into localPigs
                     setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, healthRecords: [added, ...(p.healthRecords || [])] } : p))

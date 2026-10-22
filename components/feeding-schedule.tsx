@@ -34,8 +34,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   useEffect(() => {
     if (user?.farm_id) {
       axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
+        })
         .then(resp => setPeriodRecords(resp.data.data || []))
         .catch(err => console.error('Error fetching period records:', err))
     }
@@ -44,8 +43,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   useEffect(() => {
     if (user?.farm_id) {
       axios.get(`${utils.apiUrl}/feeding/record/farm/${user.farm_id}?record_type=daily`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
+        })
         .then(resp => setDailyRecords(resp.data.data || []))
         .catch(err => console.error('Error fetching daily records:', err))
     }
@@ -204,13 +202,11 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
 
   const refreshDailyRecords = () =>
     axios.get(`${utils.apiUrl}/feeding/record/farm/${user!.farm_id}?record_type=daily`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-    }).then(resp => setDailyRecords(resp.data.data || []))
+      }).then(resp => setDailyRecords(resp.data.data || []))
 
   const refreshPeriodRecords = () =>
     axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user!.farm_id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-    }).then(resp => setPeriodRecords(resp.data.data || []))
+      }).then(resp => setPeriodRecords(resp.data.data || []))
 
   const handleDailySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -230,8 +226,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         pen_id: dailyForm.pen_id || null
       }
       const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
+        })
       const added = resp?.data?.data ?? resp?.data
       if (added?.feeding_time) {
         if (added?.pig_id) {
@@ -285,8 +280,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
       }
       await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
+        })
       showSuccess('Success', `Weekly feeding recorded (${weeklyForm.start_date} to ${weeklyForm.end_date})`)
       setAddOpen(false)
       setWeeklyForm({ pen_id: '', feed_type: 'pellets', total_amount: '', unit: 'kg', start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], notes: '' })
@@ -310,8 +304,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
       }
       await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
+        })
       showSuccess('Success', `Monthly feeding recorded (${monthlyForm.start_date} to ${monthlyForm.end_date})`)
       setAddOpen(false)
       setMonthlyForm({ pen_id: '', feed_type: 'pellets', total_amount: '', unit: 'kg', start_date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], notes: '' })

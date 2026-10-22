@@ -132,10 +132,6 @@ export default function TransferPigDialog({
     setSuccess(false);
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        throw new Error("Authentication token not found");
-      }
 
       const response = await axios.post(
         `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer`,
@@ -144,12 +140,7 @@ export default function TransferPigDialog({
           transfer_reason: transferReason,
           transfer_notes: transferNotes || null,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
+        { withCredentials: true }
       );
 
       if (response.data.success) {

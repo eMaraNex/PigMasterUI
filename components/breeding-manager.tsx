@@ -116,7 +116,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
         expected_birth_date: expectedBirthDate,
         notes: `Scheduled on ${matingDate}`,
       }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+        
       });
 
       if (breedResponse.status === 201) {
@@ -143,7 +143,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
     setIsFetchingPigs(true);
     try {
       const response = await axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+        
       });
       const newPigs = response.data.data || [];
       setPigs(newPigs);
@@ -168,7 +168,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
     setIsLoadingRecords(true);
     try {
       const response = await axios.get(`${utils.apiUrl}/breeds/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+        
       });
       const records = response.data.data || [];
       setBreedingRecords(records);

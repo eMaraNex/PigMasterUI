@@ -1,8 +1,10 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useState, useEffect, useRef } from "react"
 import getSymbol from "currency-symbol-map"
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
+import { setCurrency as setCurrencyPreference } from "@/lib/redux/preferences/preferencesSlice"
 
 type Currency = string;
 
@@ -22,19 +24,15 @@ interface CurrencyContextType {
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined)
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrencyState] = useState<Currency>("KES")
+  const currency = useAppSelector(state => state.preferences.currency)
+  const dispatch = useAppDispatch()
+  const initialCurrency = useRef(currency).current
   const [currencyRates, setCurrencyRates] = useState<Record<Currency, number>>({})
   const [supportedCurrencies, setSupportedCurrencies] = useState<Currency[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Load saved currency preference
-    const savedCurrency = localStorage.getItem("pig_farm_currency") as Currency
-    if (savedCurrency) {
-      setCurrencyState(savedCurrency)
-    }
-
     // Fetch exchange rates from ExchangeRate-API
     const fetchExchangeRates = async () => {
       setIsLoading(true)
@@ -56,10 +54,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem("supported_currencies", JSON.stringify(currencies))
           localStorage.setItem("rates_last_updated", Date.now().toString())
           // Validate saved currency
-          if (savedCurrency && !currencies.includes(savedCurrency)) {
+          if (initialCurrency && !currencies.includes(initialCurrency)) {
             const defaultCurrency = process.env.NEXT_PUBLIC_BASE_CURRENCY || "USD"
-            setCurrencyState(defaultCurrency)
-            localStorage.setItem("pig_farm_currency", defaultCurrency)
+            dispatch(setCurrencyPreference(defaultCurrency))
           }
         } else {
           throw new Error(data.error || "API request failed")
@@ -97,12 +94,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     } else {
       fetchExchangeRates()
     }
-  }, [])
+  }, [dispatch, initialCurrency])
 
   const setCurrency = (newCurrency: Currency) => {
     if (supportedCurrencies.includes(newCurrency)) {
-      setCurrencyState(newCurrency)
-      localStorage.setItem("pig_farm_currency", newCurrency)
+      dispatch(setCurrencyPreference(newCurrency))
     } else {
       console.warn(`Currency ${newCurrency} is not supported`)
     }

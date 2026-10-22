@@ -16,12 +16,16 @@ import axios from "axios";
 import * as utils from "@/lib/utils";
 import type { EarningsRecord, ProductionRecord } from "@/types";
 import { useToast } from "@/lib/toast-provider";
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
+import { setFarmProduction } from "@/lib/redux/production/productionSlice";
+import { api } from "@/lib/redux/api";
 
 export default function EarningsTracker() {
   const { currency, formatAmount, convertToBaseCurrency, getCurrencySymbol } = useCurrency();
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
   const [earnings, setEarnings] = useState<EarningsRecord[]>([]);
-  const [production, setProduction] = useState<ProductionRecord[]>([]);
+  const production = useAppSelector(state => state.production.byFarm[user?.farm_id ?? ""] ?? []);
   const [filteredEarnings, setFilteredEarnings] = useState<EarningsRecord[]>([]);
   const [dateFilter, setDateFilter] = useState("all");
   const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
@@ -115,7 +119,6 @@ export default function EarningsTracker() {
   useEffect(() => {
     if (user?.farm_id) {
       loadEarnings();
-      loadProduction();
     }
   }, [user?.farm_id]);
 
@@ -167,36 +170,24 @@ export default function EarningsTracker() {
 
   const loadEarnings = async (filters: { date_from?: string; date_to?: string } = {}) => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        showError('Error', "No authentication token found")
-      }
-
-      const params = new URLSearchParams();
-      if (filters?.date_from) params.append('date_from', filters.date_from);
-      if (filters?.date_to) params.append('date_to', filters.date_to);
-      // optional: accept filters.type etc in the future
-
-      const url = `${utils.apiUrl}/earnings/${user?.farm_id}${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setEarnings(response.data.data || []);
-      setFilteredEarnings(response.data.data || []);
+      const farmId = user?.farm_id;
+      if (!farmId) return;
+      const records = await dispatch(api.endpoints.getEarnings.initiate(
+        { farmId, ...filters },
+        { forceRefetch: true, subscribe: false },
+      )).unwrap();
+      setEarnings(records);
+      setFilteredEarnings(records);
     } catch (error) {
       showError('Error', error?.toString())
       setEarnings([]);
     }
   };
 
-  const loadProduction = () => {
-    const productionData = JSON.parse(localStorage.getItem(`pig_farm_production_${user?.farm_id}`) || "[]");
-    setProduction(productionData);
-  };
-
   const saveProductionToStorage = (data: ProductionRecord[]) => {
-    localStorage.setItem(`pig_farm_production_${user?.farm_id}`, JSON.stringify(data));
+    if (user?.farm_id) {
+      dispatch(setFarmProduction({ farmId: user.farm_id, records: data }));
+    }
   };
 
   const filterEarnings = () => {
@@ -244,10 +235,7 @@ export default function EarningsTracker() {
     }
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        showError('Error', "No authentication token found")
-      }
+
       const finalSaleType = earningsForm.sale_type || getDefaultSaleType(earningsForm.type);
       const newEarning: EarningsRecord = {
         type: earningsForm.type,
@@ -266,7 +254,7 @@ export default function EarningsTracker() {
       };
 
       await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, newEarning, {
-        headers: { Authorization: `Bearer ${token}` },
+        
       });
 
       const updatedEarnings = [...earnings, newEarning];
@@ -303,15 +291,10 @@ export default function EarningsTracker() {
     };
 
     const updatedProduction = [...production, newProduction];
-    setProduction(updatedProduction);
     saveProductionToStorage(updatedProduction);
 
     if (productionForm.sellImmediately && productionForm.salePrice) {
       try {
-        const token = localStorage.getItem("pig_farm_token");
-        if (!token) {
-          showError('Error', "No authentication token found")
-        }
 
         const saleEarning: EarningsRecord = {
           type: productionForm.type === "urine" ? "urine_sale" : "manure_sale",
@@ -325,7 +308,7 @@ export default function EarningsTracker() {
         };
 
         await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, saleEarning, {
-          headers: { Authorization: `Bearer ${token}` },
+          
         });
 
         const updatedEarnings = [...earnings, saleEarning];

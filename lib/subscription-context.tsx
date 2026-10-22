@@ -2,10 +2,11 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
 import { roles } from "./constants";
 import { useAuth } from "./auth-context";
-import { apiUrl, getFarmTrialInfo, type TrialInfo } from "./utils";
+import { getFarmTrialInfo, type TrialInfo } from "./utils";
+import { api } from "./redux/api";
+import { useAppDispatch } from "./redux/hooks";
 
 type SubscriptionTier = "free" | "standard" | "advanced" | "admin" | "superadmin"
 
@@ -123,6 +124,7 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
+    const dispatch = useAppDispatch();
     const [tier, setTier] = useState<SubscriptionTier>("free");
     const [subscriptionEndsAt, setSubscriptionEndsAt] = useState<string | null>(null);
     const [trialInfo, setTrialInfo] = useState<TrialInfo>({
@@ -132,25 +134,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     });
 
     const refreshSubscription = async () => {
-        const token = localStorage.getItem("pig_farm_token");
-
-        if (!user || !token) {
-            const fallbackRole = user?.role_id ? parseInt(user.role_id, 10) : undefined;
-            if (fallbackRole && !isNaN(fallbackRole) && roles[fallbackRole]) {
-                setTier(normalizeTier(roles[fallbackRole].name));
-            } else {
-                setTier("free");
-            }
+        if (!user) {
+            setTier("free");
             setSubscriptionEndsAt(null);
             return;
         }
 
         try {
-            const response = await axios.get(`${apiUrl}/subscriptions/me`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-
-            const subscription = response.data?.data;
+            const subscription = await dispatch(
+                api.endpoints.getSubscription.initiate(undefined, { forceRefetch: true, subscribe: false }),
+            ).unwrap();
             const planFromApi = subscription?.current_plan || subscription?.plan_name || subscription?.plan || subscription?.tier;
             const expiryDate = subscription?.expiry_date || subscription?.subscription_end || user?.subscription_end || null;
 
@@ -163,7 +156,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             }
 
             if (expiryDate && new Date(expiryDate).getTime() > Date.now()) {
-                const fallbackTier = normalizeTier(planFromApi || user?.subscription_plan || user?.role_id ? roles[Number(user.role_id)]?.name : undefined);
+                const rolePlan = user?.role_id ? roles[Number(user.role_id)]?.name : undefined;
+                const fallbackTier = normalizeTier(planFromApi || user?.subscription_plan || rolePlan);
                 setTier(fallbackTier === "free" ? "free" : fallbackTier);
                 setSubscriptionEndsAt(expiryDate);
                 return;
@@ -185,7 +179,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
     useEffect(() => {
         const updateTrialInfo = () => {
-            const info = getFarmTrialInfo();
+            const info = getFarmTrialInfo(user);
             setTrialInfo(info);
         };
 

@@ -10,17 +10,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import axios from "axios";
-import { useAuth } from "@/lib/auth-context";
 import * as utils from "@/lib/utils";
 import { MapPin, Building, Ruler, Globe, Clock, Locate, Check, ChevronsUpDown } from "lucide-react";
 import type { FarmCreationModalProps } from "@/types/farms";
 import { timezones, breeds, colors } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useToast } from '@/lib/toast-provider';
+import { api } from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
 
 const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, onFarmCreated }) => {
     const { showSuccess, showError } = useToast();
-    const { user } = useAuth();
+    const dispatch = useAppDispatch();
     const [formData, setFormData] = useState({
         id: "",
         name: "",
@@ -80,8 +81,6 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
         if (!validateForm()) return;
         setIsLoading(true);
         try {
-            const token = localStorage.getItem("pig_farm_token");
-            if (!token) throw new Error("No authentication token found");
             const payload = {
                 name: formData.name,
                 location: formData.location || undefined,
@@ -94,35 +93,11 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
                 colors: colors ?? {},
             };
 
-            // Clear existing farm-related local storage
-            localStorage.removeItem("pig_farm_id");
-            localStorage.removeItem("pig_farm_data");
-
             const response = await axios.post(`${utils.apiUrl}/farms`, payload, {
-                headers: { Authorization: `Bearer ${token}` },
+                
             });
 
-            const farmId = response.data.data.id;
-            const farmData = response.data.data;
-
-            // Set new farm data
-            let filteredUserDetails;
-            localStorage.setItem("pig_farm_id", farmId);
-            localStorage.setItem("pig_farm_data", JSON.stringify(farmData));
-            const userDetails = localStorage.getItem("pig_farm_user") ?? '';
-            filteredUserDetails = JSON.parse(userDetails);
-
-            filteredUserDetails.farm_id = farmId
-            localStorage.setItem(
-                "pig_farm_user",
-                JSON.stringify(filteredUserDetails)
-            );
-
-
-            // Update user object if it exists
-            if (user) {
-                user.farm_id = farmId;
-            }
+            dispatch(api.util.invalidateTags(["CurrentUser", "Farm"]));
             showSuccess('Success', `${formData.name} has been successfully created!`);
             // Reset form
             setFormData({

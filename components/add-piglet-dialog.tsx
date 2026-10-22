@@ -33,7 +33,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
     const fetchInitialData = async () => {
       try {
         const breedingResponse = await axios.get(`${utils.apiUrl}/breeds/history/${user.farm_id}/${sowId}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+          
         });
         const breedingData = breedingResponse.data.data || [];
         const breedingArray = Array.isArray(breedingData) ? breedingData : [breedingData];
@@ -130,7 +130,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
       // Find or create a breeding record
       let breedingRecordId
       const breedingResponse = await axios.get(`${utils.apiUrl}/breeds/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+        
       });
       const breedingRecords = breedingResponse.data.data || [];
       const specificBreedingRecord = breedingRecords.find((item: { sow_id: number | string }) => item.sow_id == sowId)
@@ -150,7 +150,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
             number_of_piglets: piglets.length,
             notes: piglets[0]?.notes || null,
           },
-          { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
+          { },
         );
         breedingRecordId = newBreedingResponse.data.data.id
       } else {
@@ -163,7 +163,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
             number_of_piglets: piglets.length,
             notes: piglets[0]?.notes || null,
           },
-          { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
+          { },
         );
       }
 
@@ -175,7 +175,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
           pregnancy_start_date: null,
           expected_birth_date: null,
         },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
+        { },
       );
 
       // Create piglet records
@@ -195,7 +195,7 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
       const response = await axios.post(
         `${utils.apiUrl}/breeds/piglets/${user.farm_id}`,
         { pigletz: pigletData },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
+        { },
       );
 
       if (response.data.success) {

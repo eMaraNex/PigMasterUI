@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,15 @@ import type { EditPigDialogProps, Pig as PigType } from "@/types";
 import { Circle } from "lucide-react";
 import { breeds, colors } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
+import { api, useGetFarmQuery, useGetPigsQuery } from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
 
 
 export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogProps) {
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
+  const { data: farmData } = useGetFarmQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const { data: pigs = [] } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
   const [formData, setFormData] = useState({
     name: pig.name || "",
     breed: pig.breed || "",
@@ -39,14 +44,9 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
   const [farmColors, setFarmColors] = useState<string[]>([]);
   const { showSuccess, showError, showWarn } = useToast();
 
-  const farmData = useMemo(() => {
-    const data = localStorage.getItem('pig_farm_data');
-    return data ? JSON.parse(data) : {};
-  }, []);
-
   useEffect(() => {
-    setFarmBreeds(farmData.breeds || breeds);
-    setFarmColors(farmData.colors || colors);
+    setFarmBreeds(Array.isArray(farmData?.breeds) ? farmData.breeds as string[] : breeds);
+    setFarmColors(Array.isArray(farmData?.colors) ? farmData.colors as string[] : colors);
   }, [farmData]);
 
   // Check if the pig is pregnant and has been served
@@ -56,13 +56,11 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
   useEffect(() => {
     const fetchBoars = async () => {
       if (!user?.farm_id) return;
-      const cachedPigs: any = localStorage.getItem(`pig_farm_pigs_${user?.farm_id}`);
-      const pigs = JSON.parse(cachedPigs);
       const malePigs = pigs.filter((r: PigType) => r.gender === "male" && utils.isPigMature(r).isMature);
       setBoars(malePigs);
     };
     fetchBoars();
-  }, [user?.farm_id, showError]);
+  }, [user?.farm_id, pigs]);
 
   // Autofill pregnancy_start_date and expected_birth_date based on mating_date
   useEffect(() => {
@@ -96,9 +94,6 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
     }
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("No authentication token found");
-
       const isPregnantAndServed = formData.is_pregnant && formData.boar_id && formData.mating_date;
       const updatedPig = {
         name: isPregnantAndServed ? pig.name : formData.name,
@@ -118,7 +113,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
       const pigResponse = await axios.put(
         `${utils.apiUrl}/pigs/${user.farm_id}/${pig.pig_id}`,
         updatedPig,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { }
       );
 
       if (!pigResponse.data.success) {
@@ -137,13 +132,11 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
             expected_birth_date: expectedBirthDate,
             notes: `Breeding recorded on ${new Date().toISOString().split('T')[0]}`,
           },
-          { headers: { Authorization: `Bearer ${token}` } }
+          { }
         );
       }
       onUpdate(pigResponse.data.data);
-      const cachedPigs = JSON.parse(localStorage.getItem(`pig_farm_pigs_${user.farm_id}`) || '[]') as PigType[];
-      const updatedPigs = cachedPigs.map((r) => (r.id === pig.id ? pigResponse.data.data : r));
-      localStorage.setItem(`pig_farm_pigs_${user.farm_id}`, JSON.stringify(updatedPigs));
+      dispatch(api.util.invalidateTags([{ type: "Pig", id: user.farm_id }]));
       showSuccess('Success', 'Pig updated successfully!');
       onClose();
     } catch (err: any) {
