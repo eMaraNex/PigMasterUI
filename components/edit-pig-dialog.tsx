@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { EditPigDialogProps, Pig as PigType } from "@/types";

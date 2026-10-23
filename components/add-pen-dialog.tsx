@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, AlertTriangle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import axios from "axios"
+import { apiRequest as axios } from "@/lib/api/client"
 import * as utils from "@/lib/utils"
 import { useToast } from "@/lib/toast-provider"
 import { api, useGetPensQuery, useGetRowsQuery } from "@/lib/redux/api"

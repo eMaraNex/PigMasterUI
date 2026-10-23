@@ -10,7 +10,7 @@ import { useToast } from '@/lib/toast-provider';
 import { Circle, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as utils from "@/lib/utils";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import type { AddPigletDialogProps, PigletFormData } from "@/types";
 import { colors } from "@/lib/constants";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";

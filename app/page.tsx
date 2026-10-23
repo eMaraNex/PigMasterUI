@@ -28,7 +28,6 @@ import { useToast } from "@/lib/toast-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { CurrencyProvider } from "@/lib/currency-context";
-import axios from "axios";
 import * as utils from "@/lib/utils";
 import type { Pig as PigType } from "@/types";
 import { useRouter } from "next/navigation";

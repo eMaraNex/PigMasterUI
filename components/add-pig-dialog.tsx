@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Circle as PigIcon, Check, ChevronsUpDown } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import { generatePigId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import * as utils from "@/lib/utils";
@@ -29,6 +29,10 @@ import {
 } from "@/lib/redux/api";
 import { useAppDispatch } from "@/lib/redux/hooks";
 
+const EMPTY_ROWS: Row[] = [];
+const EMPTY_PENS: Pen[] = [];
+const EMPTY_PIGS: Pig[] = [];
+
 export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, onPigAdded }: AddPigDialogProps) {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -45,15 +49,18 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     pen_id: customPens ? "" : pen_id,
   });
 
-  const { data: rows = [] } = useGetRowsQuery(user?.farm_id ?? "", {
+  const { data: rows = EMPTY_ROWS } = useGetRowsQuery(user?.farm_id ?? "", {
     skip: !customPens || !user?.farm_id,
   });
-  const { data: pens = [] } = useGetPensQuery(user?.farm_id ?? "", {
+  const { data: pens = EMPTY_PENS } = useGetPensQuery(user?.farm_id ?? "", {
     skip: !customPens || !user?.farm_id,
   });
   const { data: farmData } = useGetFarmQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
-  const { data: farmPigs = [] } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
-  const [filteredPens, setFilteredPens] = useState<Pen[]>([]);
+  const { data: farmPigs = EMPTY_PIGS } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const filteredPens = useMemo(
+    () => formData.row_id ? pens.filter(pen => pen.row_id === formData.row_id) : EMPTY_PENS,
+    [formData.row_id, pens],
+  );
   const [rowOpen, setRowOpen] = useState(false);
   const [penOpen, setPenOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
@@ -74,23 +81,11 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
   useEffect(() => {
     const farmId = user?.farm_id;
     if (!farmId) return;
-    setFormData(current => ({
-      ...current,
-      pig_id: generatePigId(farmId, farmData?.name, farmPigs),
-    }));
+    const nextPigId = generatePigId(farmId, farmData?.name, farmPigs);
+    setFormData(current => current.pig_id === nextPigId
+      ? current
+      : { ...current, pig_id: nextPigId });
   }, [farmData?.name, farmPigs, user?.farm_id]);
-
-  useEffect(() => {
-    if (formData.row_id) {
-      const availablePens = pens.filter(pen => pen.row_id === formData.row_id);
-      setFilteredPens(availablePens);
-      // Reset pen selection when row changes
-      setFormData(prev => ({ ...prev, pen_id: "" }));
-      setSelectedPen(null);
-    } else {
-      setFilteredPens([]);
-    }
-  }, [formData.row_id, pens]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,7 +128,6 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
           ...response.data.data,
           pen_name: finalPenName
         };
-        dispatch(api.util.invalidateTags([{ type: "Pig", id: user.farm_id }]));
         dispatch(api.util.invalidateTags([{ type: "Pig", id: user.farm_id }]));
         showSuccess('Success', 'Pig added successfully');
         onPigAdded(addedPig);
@@ -317,8 +311,10 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
                                   setFormData({
                                     ...formData,
                                     row_id: row.id ?? "",
+                                    pen_id: "",
                                   });
                                   setSelectedRow(row);
+                                  setSelectedPen(null);
                                   setRowOpen(false);
                                 }}
                                 className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5"

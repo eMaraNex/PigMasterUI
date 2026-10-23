@@ -13,7 +13,7 @@ import AddPigDialog from "@/components/add-pig-dialog";
 import RemovePigDialog from "@/components/remove-pig-dialog";
 import type { Pen, PenLayoutProps, Pig as PigType, Row } from "@/types";
 import * as utils from "@/lib/utils";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-provider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";

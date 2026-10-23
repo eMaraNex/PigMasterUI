@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
 import { Loader2, ArrowRight } from "lucide-react";
@@ -88,8 +88,7 @@ export default function PigTransferHistory({
       try {
 
         const response = await axios.get(
-          `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer-history`,
-          { withCredentials: true }
+          `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer-history`
         );
 
         if (response.data.success) {

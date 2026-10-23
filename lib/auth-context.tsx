@@ -3,8 +3,8 @@
 import type React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
+import { apiRequest } from "@/lib/api/client";
 import { useRouter } from "next/navigation";
-import * as utils from "./utils";
 import type { AuthContextType, AuthResponse, User } from "@/types";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider, firebaseConfigured } from "@/lib/firebase";
@@ -14,7 +14,6 @@ import { api, useGetCurrentUserQuery } from "@/lib/redux/api";
 import { clearProduction } from "@/lib/redux/production/productionSlice";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-axios.defaults.withCredentials = true;
 
 const toUser = (value: Record<string, unknown>): User => ({
   id: typeof value.id === "string" ? value.id : undefined,
@@ -55,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [currentSession, dispatch, isError, isLoading]);
 
   useEffect(() => {
-    const interceptor = axios.interceptors.response.use(
+    const interceptor = apiRequest.interceptors.response.use(
       response => {
         const method = String(response.config.method ?? "get").toLowerCase();
         if (["post", "put", "patch", "delete"].includes(method)) {
@@ -87,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return Promise.reject(error);
       }
     );
-    return () => axios.interceptors.response.eject(interceptor);
+    return () => apiRequest.interceptors.response.eject(interceptor);
   }, [dispatch, router]);
 
   const getErrorMessage = (error: unknown): string => {
@@ -99,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/login`, { email, password });
+      const response = await apiRequest.post("/auth/login", { email, password });
       if (response.status !== 200) return { success: false, message: "Invalid email or password" };
       const data = response.data?.data;
       const userData = toUser(data?.user ?? {});
@@ -122,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     marketingConsent = false
   ): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/register`, {
+      const response = await apiRequest.post("/auth/register", {
         email,
         password,
         name,
@@ -143,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async (): Promise<AuthResponse> => {
     let serverError: string | null = null;
     try {
-      await axios.post(`${utils.apiUrl}/auth/logout`);
+      await apiRequest.post("/auth/logout");
     } catch (error) {
       serverError = getErrorMessage(error);
     }
@@ -174,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const forgotPassword = async (email: string): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/forgot-password`, { email });
+      const response = await apiRequest.post("/auth/forgot-password", { email });
       return { success: true, message: response.data.message || "Password reset email sent" };
     } catch (error) {
       return { success: false, message: getErrorMessage(error) };
@@ -183,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (params: { token: string; currentPassword: string; newPassword: string }): Promise<AuthResponse> => {
     try {
-      const response = await axios.post(`${utils.apiUrl}/auth/reset-password`, {
+      const response = await apiRequest.post("/auth/reset-password", {
         token: params.token,
         currentPassword: params.currentPassword,
         newPassword: params.newPassword,
@@ -201,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const credential = await signInWithPopup(auth, googleProvider);
       const idToken = await credential.user.getIdToken(true);
-      const response = await axios.post(`${utils.apiUrl}/auth/sso`, { idToken });
+      const response = await apiRequest.post("/auth/sso", { idToken });
       const userData = toUser(response.data?.data?.user ?? {});
       if (!userData.email) return { success: false, message: "Authentication response did not include a user." };
       setUser(userData);

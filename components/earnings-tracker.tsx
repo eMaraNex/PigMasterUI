@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, TrendingUp, Calendar, Filter, Download, Trash2 } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
 import { useAuth } from "@/lib/auth-context";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import type { EarningsRecord, ProductionRecord } from "@/types";
 import { useToast } from "@/lib/toast-provider";

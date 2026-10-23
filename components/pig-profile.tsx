@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { X, Heart, Pill, Utensils, Edit, Circle, ArrowRightLeft } from "lucide-react";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { HealthRecord, PigProfileProps, Pig as PigType } from "@/types";

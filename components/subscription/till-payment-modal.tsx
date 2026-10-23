@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import axios from "axios"
+import { apiRequest as axios } from "@/lib/api/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,9 +58,7 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     const startPolling = (id: string) => {
         pollRef.current = setInterval(async () => {
             try {
-                const res = await axios.get(`${utils.apiUrl}/payments/${id}`, {
-                    withCredentials: true,
-                })
+                const res = await axios.get(`${utils.apiUrl}/payments/${id}`)
                 const payment = res.data?.data
 
                 if (payment?.status === "success") {
@@ -114,7 +112,6 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
             const normalizedPhone = phoneNumber.replace("+", "") // 254...
             const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
                 params: { plan: plan.id, period: plan.period === "yearly" ? "yearly" : "monthly" },
-                withCredentials: true,
             })
             const quote = quoteResponse.data?.data
             if (!quote || typeof quote.amount !== "number" || !quote.currency) {
@@ -137,7 +134,7 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 },
             }
 
-            const res = await axios.post(`${utils.apiUrl}/payments`, payload, { withCredentials: true })
+            const res = await axios.post(`${utils.apiUrl}/payments`, payload)
 
             const created = res.data?.data
             if (!created?.id) throw new Error("No payment ID returned from server")

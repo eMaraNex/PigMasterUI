@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import axios from 'axios'
+import { apiRequest as axios } from "@/lib/api/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -92,7 +92,6 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
             }
             const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
                 params: { plan: plan.id, period: selectedPeriod },
-                withCredentials: true,
             });
             const quote = quoteResponse.data?.data;
             if (!quote || typeof quote.amount !== 'number' || !quote.currency) {
@@ -155,8 +154,7 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
             // Call API using axios similar to the example
             const response = await axios.post(
                 `${utils.apiUrl}/payments`,
-                fullPayload,
-                { withCredentials: true }
+                fullPayload
             )
 
             const data = response.data;

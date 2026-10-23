@@ -38,14 +38,23 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true)
       setError(null)
       try {
+        const apiKey = process.env.NEXT_PUBLIC_API_KEY?.trim()
+        const baseCurrency = (process.env.NEXT_PUBLIC_BASE_CURRENCY?.trim() || "USD").toUpperCase()
+        if (!apiKey) {
+          throw new Error("Exchange-rate API key is not configured. Set NEXT_PUBLIC_API_KEY in PigMasterUI/.env.local.")
+        }
+        if (!/^[A-Z]{3}$/.test(baseCurrency)) {
+          throw new Error("NEXT_PUBLIC_BASE_CURRENCY must be a valid three-letter currency code.")
+        }
+
         const response = await fetch(
-          `https://v6.exchangerate-api.com/v6/${process.env.NEXT_PUBLIC_API_KEY}/latest/${process.env.NEXT_PUBLIC_BASE_CURRENCY}`
+          `https://v6.exchangerate-api.com/v6/${encodeURIComponent(apiKey)}/latest/${baseCurrency}`
         )
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`)
         }
         const data = await response.json()
-        if (data.result === "success") {
+        if (data.result === "success" && data.conversion_rates && typeof data.conversion_rates === "object") {
           setCurrencyRates(data.conversion_rates)
           const currencies = Object.keys(data.conversion_rates)
           setSupportedCurrencies(currencies)
@@ -55,11 +64,11 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem("rates_last_updated", Date.now().toString())
           // Validate saved currency
           if (initialCurrency && !currencies.includes(initialCurrency)) {
-            const defaultCurrency = process.env.NEXT_PUBLIC_BASE_CURRENCY || "USD"
+            const defaultCurrency = (process.env.NEXT_PUBLIC_BASE_CURRENCY || "USD").toUpperCase()
             dispatch(setCurrencyPreference(defaultCurrency))
           }
         } else {
-          throw new Error(data.error || "API request failed")
+          throw new Error(data["error-type"] || data.error || "Exchange-rate API returned an invalid response.")
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")

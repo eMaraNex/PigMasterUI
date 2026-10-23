@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heart, Plus, AlertTriangle } from "lucide-react";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { BreedingManagerProps, BreedingRecord, CompatibilityResult, Pig } from "@/types";

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart3, Calendar, Award, Heart, DollarSign, Download } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
 import { useAuth } from "@/lib/auth-context";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import type { Pig, EarningsRecord, ReportsProps } from "@/types";
 

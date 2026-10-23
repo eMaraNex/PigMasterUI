@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/toast-provider";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -139,8 +139,7 @@ export default function TransferPigDialog({
           new_pen_id: selectedPenId,
           transfer_reason: transferReason,
           transfer_notes: transferNotes || null,
-        },
-        { withCredentials: true }
+        }
       );
 
       if (response.data.success) {
