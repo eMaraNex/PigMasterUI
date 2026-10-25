@@ -41,6 +41,7 @@ import UpgradePrompt from "@/components/shared/upgradeprompt";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
 import { api, useGetHealthSummaryQuery } from "@/lib/redux/api";
+import { fetchFresh } from "@/lib/redux/fetch-fresh";
 import { usePermissions } from "@/lib/permissions";
 import OverviewReminders from "@/components/overview-reminders";
 import LegalLinks from "@/components/legal/legal-links";
@@ -129,9 +130,9 @@ const DashboardContent: React.FC = () => {
     try {
       const farmKey = user.farm_id;
       const [newRows, newPens, pigsResponse] = await Promise.all([
-        dispatch(api.endpoints.getRows.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
-        dispatch(api.endpoints.getPens.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
-        dispatch(api.endpoints.getPigs.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
+        fetchFresh(dispatch, api.endpoints.getRows, farmKey),
+        fetchFresh(dispatch, api.endpoints.getPens, farmKey),
+        fetchFresh<PigType, string>(dispatch, api.endpoints.getPigs, farmKey),
       ]);
       let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
@@ -164,8 +165,8 @@ const DashboardContent: React.FC = () => {
 
     try {
       const [newPens, pigsResponse] = await Promise.all([
-        dispatch(api.endpoints.getPens.initiate(user.farm_id, { forceRefetch: true, subscribe: false })).unwrap(),
-        dispatch(api.endpoints.getPigs.initiate(user.farm_id, { forceRefetch: true, subscribe: false })).unwrap(),
+        fetchFresh(dispatch, api.endpoints.getPens, user.farm_id),
+        fetchFresh<PigType, string>(dispatch, api.endpoints.getPigs, user.farm_id),
       ]);
 
       let newPigs = pigsResponse || [];

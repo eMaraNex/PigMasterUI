@@ -19,7 +19,7 @@ import { apiRequest } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth-context";
 import { useCurrency } from "@/lib/currency-context";
 import { usePermissions } from "@/lib/permissions";
-import { useGetPensQuery } from "@/lib/redux/api";
+import { useGetPensQuery, emptyList } from "@/lib/redux/api";
 import type { Pig } from "@/types";
 
 dayjs.extend(relativeTime);
@@ -75,7 +75,7 @@ export default function PigProfileView({ id }: { id: string }) {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { formatAmount: formatBase, convertToBaseCurrency } = useCurrency();
-  const { data: pens = [] } = useGetPensQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const { data: pens = emptyList() } = useGetPensQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"edit" | "transfer" | "remove" | null>(null);

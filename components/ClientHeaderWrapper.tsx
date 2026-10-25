@@ -6,14 +6,14 @@ import Header from "@/components/shared/header";
 import CurrencySelector from "@/components/currency-selector";
 import ThemeToggle from "@/components/theme-toggle";
 import AddRowDialog from "./add-row-dialog";
-import { api, useGetFarmQuery, useGetRowsQuery } from "@/lib/redux/api";
+import { api, useGetFarmQuery, useGetRowsQuery, emptyList } from "@/lib/redux/api";
 import { useAppDispatch } from "@/lib/redux/hooks";
 
 const ClientHeaderWrapper: React.FC = () => {
     const { user, logout } = useAuth();
     const dispatch = useAppDispatch();
     const [addRowOpen, setAddRowOpen] = useState(false);
-    const { data: rows = [] } = useGetRowsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+    const { data: rows = emptyList() } = useGetRowsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
     const { data: farm } = useGetFarmQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
 
     const handleAddRow = useCallback(() => setAddRowOpen(true), []);

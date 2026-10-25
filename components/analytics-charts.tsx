@@ -42,7 +42,7 @@ import {
 import { useCurrency } from "@/lib/currency-context"
 import type { MonthlyEarning, HealthData, AgeGroup, FeedData, OccupancyData, WeightTrend, MortalityData, GenderData, BreedCount } from "@/types"
 import { useAuth } from "@/lib/auth-context"
-import { useGetEarningsQuery, useGetPigsQuery, useGetRowsQuery } from "@/lib/redux/api"
+import { useGetEarningsQuery, useGetPigsQuery, useGetRowsQuery, emptyList } from "@/lib/redux/api"
 
 const colors = {
   primary: ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#06b6d4"],
@@ -68,9 +68,9 @@ export default function AnalyticsCharts() {
   const [timeRange, setTimeRange] = useState("6months")
   const [activeTab, setActiveTab] = useState("overview");
   const farmId = user?.farm_id ?? "";
-  const { data: pigs = [], isLoading: pigsLoading } = useGetPigsQuery(farmId, { skip: !farmId });
-  const { data: rows = [] } = useGetRowsQuery(farmId, { skip: !farmId });
-  const { data: earnings = [], isLoading: earningsLoading } = useGetEarningsQuery(
+  const { data: pigs = emptyList(), isLoading: pigsLoading } = useGetPigsQuery(farmId, { skip: !farmId });
+  const { data: rows = emptyList() } = useGetRowsQuery(farmId, { skip: !farmId });
+  const { data: earnings = emptyList(), isLoading: earningsLoading } = useGetEarningsQuery(
     { farmId },
     { skip: !farmId },
   );

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ALL_TIME, DateRangePicker, describeRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker";
 import { ExportMenu } from "@/components/shared/export-menu";
+import { fetchFresh } from "@/lib/redux/fetch-fresh";
 import { usePermissions } from "@/lib/permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -132,10 +133,9 @@ export default function EarningsTracker() {
     try {
       const farmId = user?.farm_id;
       if (!farmId) return;
-      const records = await dispatch(api.endpoints.getEarnings.initiate(
-        { farmId, ...filters },
-        { forceRefetch: true, subscribe: false },
-      )).unwrap();
+      const records = await fetchFresh<EarningsRecord, { farmId: string; date_from?: string; date_to?: string }>(
+        dispatch, api.endpoints.getEarnings, { farmId, ...filters },
+      );
       // RTK Query results are frozen; keep mutable copies because the table sorts in place.
       setEarnings([...records]);
       setFilteredEarnings([...records]);

@@ -17,6 +17,7 @@ import { planetNames } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
 import { api } from "@/lib/redux/api";
 import { useAppDispatch } from "@/lib/redux/hooks";
+import { fetchFresh } from "@/lib/redux/fetch-fresh";
 
 export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: AddRowDialogProps) {
   const { user } = useAuth();
@@ -37,6 +38,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   const isEditing = !!rowToEdit;
   const farmId = user?.farm_id;
 
+  const CAPACITY_OPTIONS = [6, 8, 12, 15, 18, 24, 30, 36, 42, 48, 54, 60, 72];
+
   const getValidLevels = (capacity: number) => {
     const possibleLevels = [1, 2, 3, 4, 5, 6];
     return possibleLevels.filter(level => capacity % level === 0);
@@ -48,15 +51,15 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
 
     // Pre-fill form for editing
     if (isEditing && rowToEdit) {
+      // Capacities outside the preset list (e.g. 3 or 10 pens) go in the "Other" box.
+      const preset = CAPACITY_OPTIONS.includes(Number(rowToEdit.capacity));
       setFormData({
         name: rowToEdit.name,
         description: rowToEdit.description || "",
-        capacity: rowToEdit.capacity.toString(),
-        levels: rowToEdit.levels.length.toString(),
+        capacity: preset ? String(rowToEdit.capacity) : "other",
+        levels: String(rowToEdit.levels?.length || 1),
       });
-      if (!planetNames.includes(rowToEdit.capacity.toString()) && rowToEdit.capacity !== 0) {
-        setCustomCapacity(rowToEdit.capacity.toString());
-      }
+      setCustomCapacity(preset ? "" : String(rowToEdit.capacity ?? ""));
     } else {
       setFormData({ name: "", description: "", capacity: "6", levels: "3" });
       setCustomCapacity("");
@@ -67,14 +70,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
       try {
 
         const [newRows, newPens] = await Promise.all([
-          dispatch(api.endpoints.getRows.initiate(
-            farmId,
-            { forceRefetch: true, subscribe: false },
-          )).unwrap(),
-          dispatch(api.endpoints.getPens.initiate(
-            farmId,
-            { forceRefetch: true, subscribe: false },
-          )).unwrap(),
+          fetchFresh<Row, string>(dispatch, api.endpoints.getRows, farmId),
+          fetchFresh<Pen, string>(dispatch, api.endpoints.getPens, farmId),
         ]);
         setExistingRows(newRows);
         setExistingPens(newPens);
@@ -83,7 +80,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
       }
     };
     fetchData();
-  }, [dispatch, open, farmId, isEditing, rowToEdit, showError]);
+    // Only re-run when the dialog opens or a different row is edited.
+  }, [dispatch, open, farmId, rowToEdit?.id]);
 
   const getNextPlanetName = () => {
     const usedNames = existingRows.map((row) => row.name);
@@ -135,7 +133,8 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
     if (isNaN(levels) || levels < 1) {
       newErrors.levels = "Number of levels must be a positive number.";
     }
-    if (capacity % levels !== 0) {
+    // Levels are fixed when editing, so only new rows must split evenly across levels.
+    if (!isEditing && capacity % levels !== 0) {
       newErrors.levels = "Capacity must be divisible by the number of levels.";
     }
     setErrors(newErrors);
@@ -168,65 +167,16 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
       if (!user?.farm_id) throw new Error("Farm ID missing");
 
       if (isEditing && rowToEdit) {
-        // Edit mode: Update existing row
-        const updatedRow: Partial<Row> = {
-          name: newRowName,
-          description: formData.description || `${newRowName} row with ${capacity} pens across ${numLevels} levels`,
+        // A row's name and levels are fixed once its pens exist (pen names are built from them);
+        // only the description and capacity can change. The API rejects a capacity below the pens already in the row.
+        const response = await axios.put(`${utils.apiUrl}/rows/update/${rowToEdit.id}`, {
+          description: formData.description || null,
           capacity,
-          levels: generateLevels(numLevels),
-        };
-
-        const response = await axios.put(
-          `${utils.apiUrl}/rows/update/${rowToEdit.id}`,
-          updatedRow,
-          { }
-        );
-
+        });
         if (!response.data.success) {
           throw new Error(response.data.message || "Failed to update row");
         }
-
-        // Update pens if capacity or levels changed
-        const currentPens = existingPens.filter(h => h.row_name === rowToEdit.name);
-        const newDistribution = distributePens(capacity, numLevels);
-        const newPens: Pen[] = [];
-        for (const [level, count] of Object.entries(newDistribution)) {
-          for (let position = 1; position <= count; position++) {
-            const pen_id = `${newRowName}-${level}${position}`;
-            const existingPen = currentPens.find(h => h.level === level && h.position === position);
-            if (!existingPen) {
-              newPens.push({
-                id: pen_id,
-                farm_id: user.farm_id,
-                row_name: newRowName,
-                row_id: rowToEdit.id ?? '',
-                level,
-                position,
-                size: "medium",
-                material: "wire",
-                features: ["water bottle", "feeder"],
-                is_occupied: false,
-                is_deleted: 0,
-                name: "",
-                last_cleaned: null,
-                created_at: "",
-                updated_at: ""
-              });
-            }
-          }
-        }
-
-        // Update local storage
-        const updatedRows = existingRows.map(r => r.id === rowToEdit.id ? { ...r, ...updatedRow } : r);
-        const updatedPens = [
-          ...existingPens.filter(h => h.row_name !== rowToEdit.name),
-          ...currentPens.filter(h => newDistribution[h.level] >= h.position),
-          ...newPens
-        ];
-        setExistingRows(updatedRows);
-        setExistingPens(updatedPens);
-
-        showSuccess("Success", `Row "${newRowName}" updated successfully!`)
+        showSuccess("Success", `Row "${rowToEdit.name}" updated successfully!`)
       } else {
         // Add mode: Create new row
         if (existingRows.some((row) => row.name === newRowName)) {
@@ -280,6 +230,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
   };
 
   useEffect(() => {
+    if (isEditing) return;
     const capacityNum = formData.capacity === "other" ? parseInt(customCapacity || "0") : parseInt(formData.capacity || "0");
     const levelsNum = parseInt(formData.levels);
     const validLevels = getValidLevels(capacityNum);
@@ -326,11 +277,17 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                 id="name"
                 placeholder={isEditing ? rowToEdit?.name : `Suggested: ${getNextPlanetName()}`}
                 value={formData.name}
+                disabled={isEditing}
                 onChange={e =>
                   setFormData({ ...formData, name: e.target.value })
                 }
                 className="h-12 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 dark:text-gray-100"
               />
+              {isEditing && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  The name and levels can&apos;t change once pens exist, because pen names are built from them.
+                </p>
+              )}
               {!isEditing && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Leave empty to use: {getNextPlanetName()}
@@ -357,7 +314,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                   <SelectValue placeholder="Select capacity" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[6, 8, 12, 15, 18, 24, 30, 36, 42, 48, 54, 60, 72].map(cap => (
+                  {CAPACITY_OPTIONS.map(cap => (
                     <SelectItem key={cap} value={cap.toString()}>
                       {cap} Pens
                     </SelectItem>
@@ -396,6 +353,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
               </Label>
               <Select
                 value={formData.levels}
+                disabled={isEditing}
                 onValueChange={value =>
                   setFormData({ ...formData, levels: value })
                 }
@@ -404,7 +362,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
                   <SelectValue placeholder="Select number of levels" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getValidLevels(effectiveCapacity).map(num => (
+                  {(isEditing ? [Number(formData.levels)] : getValidLevels(effectiveCapacity)).map(num => (
                     <SelectItem key={num} value={num.toString()}>
                       {num} Levels
                     </SelectItem>

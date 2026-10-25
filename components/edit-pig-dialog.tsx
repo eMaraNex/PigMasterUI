@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import type { EditPigDialogProps, Pig as PigType } from "@/types";
 import { Circle } from "lucide-react";
 import { breeds, colors } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
-import { api, useGetFarmQuery, useGetPigsQuery } from "@/lib/redux/api";
+import { api, useGetFarmQuery, useGetPigsQuery, emptyList } from "@/lib/redux/api";
 import { useAppDispatch } from "@/lib/redux/hooks";
 
 
@@ -21,7 +21,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const { data: farmData } = useGetFarmQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
-  const { data: pigs = [] } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const { data: pigs = emptyList() } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
   const [formData, setFormData] = useState({
     name: pig.name || "",
     breed: pig.breed || "",
@@ -39,7 +39,11 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
 
 
   const [error, setError] = useState<string | null>(null);
-  const [boars, setBoars] = useState<PigType[]>([]);
+  // Mature boars this sow can be recorded as served by.
+  const boars = useMemo(
+    () => pigs.filter((r: PigType) => r.gender === "male" && utils.isPigMature(r).isMature),
+    [pigs],
+  );
   const [farmBreeds, setFarmBreeds] = useState<string[]>([]);
   const [farmColors, setFarmColors] = useState<string[]>([]);
   const { showSuccess, showError, showWarn } = useToast();
@@ -51,16 +55,6 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
 
   // Check if the pig is pregnant and has been served
   const isPregnantAndServed = pig.is_pregnant && (pig.last_mating_date || pig.pregnancy_start_date);
-
-  // Fetch available boars
-  useEffect(() => {
-    const fetchBoars = async () => {
-      if (!user?.farm_id) return;
-      const malePigs = pigs.filter((r: PigType) => r.gender === "male" && utils.isPigMature(r).isMature);
-      setBoars(malePigs);
-    };
-    fetchBoars();
-  }, [user?.farm_id, pigs]);
 
   // Autofill pregnancy_start_date and expected_birth_date based on mating_date
   useEffect(() => {

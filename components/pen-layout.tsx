@@ -500,13 +500,12 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
                                     </div>
                                     {isOccupied ? (
                                       <>
-                                        {/* Count first so a pen of 10+ pigs stays readable at a glance */}
-                                        <div className="text-lg md:text-xl font-bold leading-none text-green-700 dark:text-green-300" title={utils.formatPigCount(sows, boars)}>
+                                        {/* Total pigs, then the sows/boars breakdown, so both read at a glance */}
+                                        <div className="text-lg md:text-xl font-bold leading-none text-green-700 dark:text-green-300">
                                           {pigsInPen.length}
                                         </div>
-                                        <div className="mt-1 flex justify-center gap-1.5 text-[10px] md:text-xs font-medium">
-                                          {sows > 0 && <span className="text-pink-600 dark:text-pink-400">♀{sows}</span>}
-                                          {boars > 0 && <span className="text-blue-600 dark:text-blue-400">♂{boars}</span>}
+                                        <div className="mt-1 text-xs leading-tight text-green-700 dark:text-green-300">
+                                          {utils.formatPigCount(sows, boars)}
                                         </div>
                                       </>
                                     ) : (

@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context"
 import { apiRequest as axios } from "@/lib/api/client"
 import * as utils from "@/lib/utils"
 import { useToast } from "@/lib/toast-provider"
-import { api, useGetPensQuery, useGetRowsQuery } from "@/lib/redux/api"
+import { api, useGetPensQuery, useGetRowsQuery, emptyList } from "@/lib/redux/api"
 import { useAppDispatch } from "@/lib/redux/hooks"
 
 export default function AddPenDialog() {
@@ -26,8 +26,8 @@ export default function AddPenDialog() {
     material: "",
     features: "",
   })
-  const { data: rows = [] } = useGetRowsQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
-  const { data: pens = [] } = useGetPensQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
+  const { data: rows = emptyList() } = useGetRowsQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
+  const { data: pens = emptyList() } = useGetPensQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
   const dispatch = useAppDispatch()
   const { showError, showWarn } = useToast();
 

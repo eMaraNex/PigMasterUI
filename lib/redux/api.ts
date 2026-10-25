@@ -3,6 +3,13 @@ import type { EarningsRecord, Pen, Pig, Row } from "@/types";
 import { apiUrl } from "@/lib/utils";
 import { clearSession } from "./session/sessionSlice";
 
+const EMPTY: unknown[] = [];
+/**
+ * Stable fallback for list queries that have not loaded yet. Use `data: rows = emptyList()`,
+ * never `= []`: a new array each render re-triggers effects that depend on it and can loop forever.
+ */
+export const emptyList = <T,>(): T[] => EMPTY as T[];
+
 type ApiEnvelope<T> = { data: T; success: boolean; message?: string };
 export type Farm = {
   id: string;
