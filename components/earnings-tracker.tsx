@@ -178,8 +178,9 @@ export default function EarningsTracker() {
         { farmId, ...filters },
         { forceRefetch: true, subscribe: false },
       )).unwrap();
-      setEarnings(records);
-      setFilteredEarnings(records);
+      // RTK Query results are frozen; keep mutable copies because the table sorts in place.
+      setEarnings([...records]);
+      setFilteredEarnings([...records]);
     } catch (error) {
       showError('Error', error?.toString())
       setEarnings([]);

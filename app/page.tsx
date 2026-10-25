@@ -18,7 +18,7 @@ import AnalyticsCharts from "@/components/analytics-charts";
 import CurrencySelector from "@/components/currency-selector";
 import AddRowDialog from "@/components/add-row-dialog";
 import FarmBanner from "@/components/farm-banner";
-import Calendar, { type CalendarEvent } from "@/components/calender";
+import Calendar from "@/components/calender";
 import EmailVerificationBanner from "@/components/email-verification-banner";
 import ProtectedRoute from "@/components/auth/protected-route";
 import ThemeToggle from "@/components/theme-toggle";
@@ -32,7 +32,7 @@ import * as utils from "@/lib/utils";
 import type { Pig as PigType } from "@/types";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/shared/sidebar";
-import { Alert, ServerAlert, AlertCalendar } from "@/types";
+import { Alert, ServerAlert } from "@/types";
 import { penNamesConversion } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import FarmCreationModal from "@/components/farm-creation-modal";
@@ -43,7 +43,7 @@ import { useSubscription } from "@/lib/subscription-context";
 import UpgradePrompt from "@/components/shared/upgradeprompt";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
-import { api } from "@/lib/redux/api";
+import { api, useGetHealthSummaryQuery } from "@/lib/redux/api";
 
 const DashboardContent: React.FC = () => {
   const { user, logout } = useAuth();
@@ -51,6 +51,7 @@ const DashboardContent: React.FC = () => {
   const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier } = useSubscription();
   const [selectedPig, setSelectedPig] = useState<PigType | null>(null);
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const { data: healthSummary } = useGetHealthSummaryQuery(undefined, { skip: !user?.farm_id });
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [pens, setPens] = useState<any[]>([]);
   const [rows, setRows] = useState<any[]>([]);
@@ -59,7 +60,6 @@ const DashboardContent: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [calendarEvents, setCalendarEvents] = useState<AlertCalendar[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showMandatoryRowModal, setShowMandatoryRowModal] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState<boolean>(false);
@@ -93,28 +93,6 @@ const DashboardContent: React.FC = () => {
     }
   }, [hasFarm, dataLoaded, rows.length])
 
-  function transformRawEvents(rawData: AlertCalendar[]): CalendarEvent[] {
-    const transformedEvents: CalendarEvent[] = [];
-    const today = new Date();
-
-    rawData.forEach((rawItem) => {
-      rawItem.notify_on.forEach((notifyDateStr) => {
-        const notifyDate = new Date(notifyDateStr);
-        const type: "event" | "notification" = notifyDate < today ? "event" : "notification"
-        const time: string | undefined = undefined;
-        transformedEvents.push({
-          id: rawItem.id,
-          date: notifyDate.toISOString().split("T")[0],
-          title: rawItem.name,
-          description: rawItem.message,
-          type: type,
-          time: time,
-        });
-      });
-    });
-    return transformedEvents;
-  }
-
   const loadData = useCallback(async () => {
     if (!user?.farm_id) {
       setDataLoaded(true);
@@ -126,12 +104,11 @@ const DashboardContent: React.FC = () => {
 
     try {
       const farmKey = user.farm_id;
-      const [newRows, newPens, pigsResponse, serverAlertsResponse, calendarResponse] = await Promise.all([
+      const [newRows, newPens, pigsResponse, serverAlertsResponse] = await Promise.all([
         dispatch(api.endpoints.getRows.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
         dispatch(api.endpoints.getPens.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
         dispatch(api.endpoints.getPigs.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
         dispatch(api.endpoints.getFarmAlerts.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
-        dispatch(api.endpoints.getFarmCalendar.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
       ]);
       let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
@@ -145,7 +122,6 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const calendarAlerts = calendarResponse as AlertCalendar[] || [];
       const serverAlerts: ServerAlert[] = serverAlertsResponse as ServerAlert[] || [];
 
       const mappedAlerts: Alert[] = serverAlerts.map((alert) => ({
@@ -163,7 +139,6 @@ const DashboardContent: React.FC = () => {
       setPens(newPens);
       setPigs(newPigs);
       setAlerts(mappedAlerts);
-      setCalendarEvents(calendarAlerts);
       setDataLoaded(true);
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -277,7 +252,6 @@ const DashboardContent: React.FC = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const events = transformRawEvents(calendarEvents);
   const totalPigs = pigs.length;
   const sows = pigs.filter((r) => r.gender === "female").length;
   const boars = pigs.filter((r) => r.gender === "male").length;
@@ -451,7 +425,13 @@ const DashboardContent: React.FC = () => {
                           </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("breeding")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("breeding")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Pregnant Sows</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg">
@@ -467,7 +447,13 @@ const DashboardContent: React.FC = () => {
                           </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("health")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("health")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Health Alerts</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg">
@@ -476,12 +462,20 @@ const DashboardContent: React.FC = () => {
                         </CardHeader>
                         <CardContent>
                           <div className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                            {alerts.filter((a) => a.type === "Medication Due").length}
+                            {(healthSummary?.overdue ?? 0) + (healthSummary?.due_this_week ?? 0)}
                           </div>
-                          <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">Medication due</p>
+                          <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">
+                            {healthSummary?.overdue ?? 0} overdue, {healthSummary?.due_this_week ?? 0} due this week
+                          </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("pens")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("pens")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Active Rows</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg">
@@ -618,7 +612,7 @@ const DashboardContent: React.FC = () => {
               </TabsContent>
               <TabsContent value="calender">
                 {isFeatureAvailable("calender") ? (
-                  <Calendar events={events} pens={pens} />
+                  <Calendar />
                 ) : (
                   <UpgradePrompt feature="Calender" />
                 )}

@@ -27,6 +27,15 @@ export type PigListResult = {
   };
 };
 
+export type HealthSummary = {
+  overdue: number;
+  due_this_week: number;
+  scheduled_later: number;
+  done_this_month: number;
+  vaccinations_this_year: number;
+  pigs_treated_30d: number;
+};
+
 export type SubscriptionData = {
   current_plan?: string;
   plan_name?: string;
@@ -50,7 +59,7 @@ export const api = createApi({
     if (result.error?.status === 401) apiContext.dispatch(clearSession());
     return result;
   },
-  tagTypes: ["Farm", "Pig", "Rows", "Pens", "Earnings", "Subscription", "CurrentUser"],
+  tagTypes: ["Farm", "Pig", "Rows", "Pens", "Earnings", "Subscription", "CurrentUser", "Health"],
   endpoints: builder => ({
     getCurrentUser: builder.query<Record<string, unknown>, void>({
       query: () => "/auth/me",
@@ -91,6 +100,11 @@ export const api = createApi({
       query: () => "/alerts/list?limit=1000",
       transformResponse: (response: ApiEnvelope<unknown[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Farm", id: `${farmId}-calendar` }],
+    }),
+    getHealthSummary: builder.query<HealthSummary, void>({
+      query: () => "/health-records/summary",
+      transformResponse: (response: ApiEnvelope<HealthSummary>) => response.data,
+      providesTags: ["Health"],
     }),
     getSubscription: builder.query<SubscriptionData, void>({
       query: () => "/subscriptions/me",
@@ -214,6 +228,7 @@ export const {
   useGetFarmAlertsQuery,
   useGetFarmCalendarQuery,
   useGetSubscriptionQuery,
+  useGetHealthSummaryQuery,
   useCreateFarmMutation,
   useUpdateFarmMutation,
   useGetPigDetailsQuery,
