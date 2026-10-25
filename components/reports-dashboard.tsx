@@ -41,7 +41,7 @@ function Kpi({ icon: Icon, label, value, hint, tone }: { icon: typeof PiggyBank;
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</p>
           <Icon className={`h-4 w-4 ${tone}`} />
         </div>
-        <p className="mt-2 text-xl font-bold sm:text-2xl">{value}</p>
+        <p className="mt-2 break-words text-lg font-bold leading-tight sm:text-2xl">{value}</p>
         {hint && <p className="text-xs text-gray-500">{hint}</p>}
       </CardContent>
     </Card>

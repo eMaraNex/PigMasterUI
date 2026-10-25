@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ALL_TIME, DateRangePicker, describeRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker";
 import { ExportMenu } from "@/components/shared/export-menu";
+import Pagination from "@/components/shared/pagination";
 import { fetchFresh } from "@/lib/redux/fetch-fresh";
 import { usePermissions } from "@/lib/permissions";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +35,8 @@ export default function EarningsTracker() {
   const production = useAppSelector(state => state.production.byFarm[user?.farm_id ?? ""] ?? []);
   const [filteredEarnings, setFilteredEarnings] = useState<EarningsRecord[]>([]);
   const [range, setRange] = useState<DateRange>(ALL_TIME);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const { can } = usePermissions();
   const [addEarningsOpen, setAddEarningsOpen] = useState(false);
   const [addProductionOpen, setAddProductionOpen] = useState(false);
@@ -126,6 +129,7 @@ export default function EarningsTracker() {
   useEffect(() => {
     if (!user?.farm_id) return;
     const { from, to } = rangeToDates(range);
+    setPage(1);
     loadEarnings({ date_from: from, date_to: to });
   }, [range, user?.farm_id, reloadKey]);
 
@@ -280,6 +284,12 @@ export default function EarningsTracker() {
   };
 
   const earningsByType = getEarningsByType();
+
+  // Newest first, one page at a time; totals above still cover the whole date range.
+  const sortedEarnings = [...filteredEarnings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const pageCount = Math.max(1, Math.ceil(sortedEarnings.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedEarnings = sortedEarnings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
@@ -832,9 +842,7 @@ export default function EarningsTracker() {
         <CardContent className="p-3 sm:p-6">
           <div className="space-y-3 sm:space-y-4">
             {filteredEarnings.length > 0 ? (
-              filteredEarnings
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .map((earning, index) => (
+              pagedEarnings.map((earning, index) => (
                   <div
                     key={`${earning.id || index}-${earning.created_at || earning.date}`}
                     className="flex flex-col lg:flex-row lg:items-center lg:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 lg:space-y-0"
@@ -924,6 +932,18 @@ export default function EarningsTracker() {
                 <span className="text-2xl sm:text-3xl mx-auto mb-4 opacity-50">{getCurrencySymbol(currency)}</span>
                 <p className="text-sm sm:text-base">No earnings records found for the selected period.</p>
               </div>
+            )}
+            {filteredEarnings.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredEarnings.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={size => { setPageSize(size); setPage(1); }}
+                pageSizeOptions={[10, 20, 50, 100]}
+                currentPageItems={pagedEarnings.length}
+                className="pt-2"
+              />
             )}
           </div>
         </CardContent>

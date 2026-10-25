@@ -142,7 +142,7 @@ export default function FeedingSchedule(_props: FeedingScheduleProps) {
               <CardTitle className="flex items-center gap-2 text-base"><Wheat className="h-5 w-5 text-amber-600" />Feeding round · {dayjs().format("ddd D MMM")}</CardTitle>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setShowGuide(v => !v)}><Info className="mr-1 h-4 w-4" />Ration guide</Button>
-                <Button onClick={saveRound} disabled={saving || !selected.length} className="bg-gradient-to-r from-green-500 to-emerald-600 text-white">
+                <Button onClick={saveRound} disabled={saving || !selected.length} className="hidden bg-gradient-to-r from-green-500 to-emerald-600 text-white md:inline-flex">
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save {selected.length} pens · {Math.round(selectedKg * 10) / 10} kg
                 </Button>
@@ -164,7 +164,43 @@ export default function FeedingSchedule(_props: FeedingScheduleProps) {
           <CardContent>
             {loadingPlan ? <div className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></div>
               : !plan?.pens.length ? <p className="py-10 text-center text-sm text-gray-500">No pens have pigs yet. Add pigs to pens to start recording feeding.</p> : (
-              <div className="overflow-x-auto rounded-lg border dark:border-gray-700">
+              <>
+              {/* Phones: one card per pen so feed and kg stay on screen */}
+              <div className="space-y-2 md:hidden">
+                <label className="flex items-center gap-2 px-1 text-xs text-gray-600 dark:text-gray-300">
+                  <input type="checkbox" checked={selected.length === plan.pens.length} onChange={e => setAll(e.target.checked)} />
+                  Select all {plan.pens.length} pens
+                </label>
+                {plan.pens.map(pen => {
+                  const row = rows[pen.pen_id]
+                  if (!row) return null
+                  return (
+                    <div key={pen.pen_id} className={`rounded-xl border p-3 dark:border-gray-700 ${row.selected ? "border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10" : "bg-white/60 dark:bg-gray-900/40"}`}>
+                      <label className="flex items-start gap-3">
+                        <input type="checkbox" className="mt-1 h-4 w-4" aria-label={`Feed ${pen.pen_name}`} checked={row.selected} onChange={e => updateRow(pen.pen_id, { selected: e.target.checked })} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium">{pen.pen_name}</span>
+                          <span className="block text-xs text-gray-500">{pen.pigs} pig{pen.pigs === 1 ? "" : "s"} · {stageText(pen.stages)}</span>
+                          {pen.fed_today_kg > 0 && <Badge variant="outline" className="mt-1 text-[10px] text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{pen.fed_today_kg} kg given today</Badge>}
+                        </span>
+                      </label>
+                      <div className="mt-2 flex items-end gap-2">
+                        <select value={row.feed_type} onChange={e => updateRow(pen.pen_id, { feed_type: e.target.value })}
+                          className="h-10 min-w-0 flex-1 rounded-md border bg-white px-2 text-sm dark:bg-gray-900" aria-label={`Feed for ${pen.pen_name}`}>
+                          {[...new Set([row.feed_type, ...plan.feed_types])].map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                        <div className="w-24 shrink-0">
+                          <Input type="number" inputMode="decimal" min={0} step="0.1" value={row.amount} onChange={e => updateRow(pen.pen_id, { amount: e.target.value, selected: true })}
+                            className="h-10" aria-label={`Kg for ${pen.pen_name}`} />
+                          <div className="mt-0.5 text-right text-[10px] text-gray-500">kg · suggested {pen.suggested_kg}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-lg border md:block dark:border-gray-700">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900">
                     <tr>
@@ -204,6 +240,15 @@ export default function FeedingSchedule(_props: FeedingScheduleProps) {
                   </tbody>
                 </table>
               </div>
+
+              {/* Phones: keep the save button in reach while scrolling a long list of pens */}
+              <div className="sticky bottom-3 z-10 mt-3 md:hidden">
+                <Button onClick={saveRound} disabled={saving || !selected.length} className="h-12 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg">
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save {selected.length} pens · {Math.round(selectedKg * 10) / 10} kg
+                </Button>
+              </div>
+              </>
             )}
           </CardContent>
         </Card>

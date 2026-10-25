@@ -190,54 +190,21 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-5">
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader>
-            <CardTitle className="text-lg text-gray-900 dark:text-gray-100">
-              Available Sows
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 dark:from-green-400 dark:to-blue-400 bg-clip-text text-transparent">
-              {availableSows.length}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Ready for breeding
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader>
-            <CardTitle className="text-lg text-gray-900 dark:text-gray-100">
-              Pregnant Sows
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-red-600 dark:from-pink-400 dark:to-red-400 bg-clip-text text-transparent">
-              {pregnantSows.length}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Currently expecting
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader>
-            <CardTitle className="text-lg text-gray-900 dark:text-gray-100">
-              Active Boars
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-              {availableBoars.length}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Available for breeding
-            </p>
-          </CardContent>
-        </Card>
+      {/* Three compact counters side by side, even on phones */}
+      <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-6">
+        {[
+          { label: "Available Sows", value: availableSows.length, hint: "Ready for breeding", tone: "from-green-600 to-blue-600 dark:from-green-400 dark:to-blue-400" },
+          { label: "Pregnant Sows", value: pregnantSows.length, hint: "Currently expecting", tone: "from-pink-600 to-red-600 dark:from-pink-400 dark:to-red-400" },
+          { label: "Active Boars", value: availableBoars.length, hint: "Available for breeding", tone: "from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400" },
+        ].map(stat => (
+          <Card key={stat.label} className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardContent className="p-3 sm:p-6">
+              <p className="text-xs font-medium text-gray-900 dark:text-gray-100 sm:text-lg">{stat.label}</p>
+              <div className={`mt-1 text-2xl font-bold bg-gradient-to-r ${stat.tone} bg-clip-text text-transparent sm:mt-3`}>{stat.value}</div>
+              <p className="hidden text-sm text-gray-600 dark:text-gray-400 sm:block">{stat.hint}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Breeding Planner */}

@@ -119,7 +119,47 @@ const Table: React.FC<TableProps> = ({
 
     return (
         <div className={`bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden ${className}`}>
-            <div className="overflow-x-auto">
+            {/* Phones: each row as a card (first column as the title, the rest as label/value pairs) */}
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
+                {data.map((row, index) => {
+                    const rowId = row[idField];
+                    if (rowId == null) return null;
+                    const [first, ...rest] = columns;
+                    const cell = (column: TableColumn) => (column.render ? column.render(row[column.key], row, index) : (row[column.key] ?? ""));
+                    return (
+                        <li key={rowId} className={`p-4 ${onRowClick ? "cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50" : ""}`} onClick={() => onRowClick?.(row)}>
+                            <div className="flex items-start gap-3">
+                                {selectable && (
+                                    <span onClick={event => event.stopPropagation()} className="pt-1">
+                                        <Checkbox checked={selectedItems.includes(rowId)} onCheckedChange={() => handleSelectItem(rowId)} className="rounded-md" />
+                                    </span>
+                                )}
+                                <div className="min-w-0 flex-1">{first && cell(first)}</div>
+                            </div>
+                            {rest.length > 0 && (
+                                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                    {rest.map(column => (
+                                        <div key={column.key} className="min-w-0">
+                                            <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{column.label}</dt>
+                                            <dd className="mt-0.5 min-w-0 break-words">{cell(column)}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            )}
+                            {actions.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-1 border-t border-gray-100 pt-2 dark:border-gray-800" onClick={event => event.stopPropagation()}>
+                                    {actions.filter(action => (action.condition ? action.condition(row) : true)).map(action => (
+                                        <Button key={action.label} variant="ghost" size="sm" onClick={() => action.onClick(row)} className={`h-8 gap-1.5 rounded-lg px-2 text-xs ${action.className || ""}`}>
+                                            <action.icon className="h-4 w-4" />{action.label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
                 <table className="w-full">
                     <thead>
                         <tr className={`border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 ${headerClassName}`}>

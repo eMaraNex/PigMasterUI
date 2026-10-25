@@ -288,7 +288,58 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-lg border dark:border-gray-700">
+          {/* Phones: one card per record so the actions stay visible */}
+          <ul className="space-y-2 md:hidden">
+            {loading && records.length === 0 && <li className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></li>}
+            {!loading && records.length === 0 && <li className="py-10 text-center text-sm text-gray-500">{view === "due" ? "Nothing due. Well done!" : "No health records yet."}</li>}
+            {records.map(record => {
+              const due = view === "due" ? dueLabel(record) : null
+              return (
+                <li key={record.id} className={`rounded-xl border p-3 dark:border-gray-700 ${loading ? "opacity-60" : ""}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{record.description}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{record.pig_id}</span>
+                        {record.pig_name ? ` · ${record.pig_name}` : ""}
+                        {record.veterinarian ? ` · ${record.veterinarian}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-[10px] capitalize">{record.type}</Badge>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="text-xs">
+                      {view === "due" ? (
+                        <span className="flex items-center gap-1.5">
+                          {record.due_date && dayjs(record.due_date).format("D MMM YYYY")}
+                          {due && <Badge variant={due.tone} className="text-[10px]">{due.text}</Badge>}
+                        </span>
+                      ) : (
+                        <span>
+                          Given {dayjs(record.date).format("D MMM YYYY")}
+                          {record.next_due && <span className="text-gray-500"> · next {dayjs(record.next_due).format("D MMM")}</span>}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center">
+                      {view === "due" && can("health_records", "update") && (
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => setCompleting(record)}>
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Given
+                        </Button>
+                      )}
+                      {can("health_records", "delete") && (
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => remove(record)} aria-label="Delete record">
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-lg border md:block dark:border-gray-700">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900">
                 <tr>
