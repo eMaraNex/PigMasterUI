@@ -4,6 +4,7 @@ import type React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import ClientHeaderWrapper from "@/components/ClientHeaderWrapper";
+import LegalLinks from "@/components/legal/legal-links";
 
 type Crumb = { label: string; href?: string };
 
@@ -70,6 +71,7 @@ export default function PageShell({ title, description, backHref = "/", breadcru
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
         </div>
         {children}
+        <LegalLinks className="mt-12" />
       </main>
     </div>
   );

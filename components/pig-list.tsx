@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
+import { Eye, Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
+import { useRouter } from "next/navigation"
 import type { PigListProps, Pig as PigType } from "@/types";
 import EditPigDialog from "@/components/edit-pig-dialog";
 import AddPigletDialog from "@/components/add-piglet-dialog";
@@ -29,6 +30,7 @@ interface PigStatistics {
 }
 
 const PigList: React.FC<PigListProps> = ({ farmId }) => {
+  const router = useRouter();
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [selectedPigs, setSelectedPigs] = useState<string[]>([]);
   const [editingPig, setEditingPig] = useState<PigType | null>(null);
@@ -218,6 +220,12 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
   ]
 
   const tableActions = [
+    {
+      label: "Open profile",
+      icon: Eye,
+      onClick: (row: PigType) => row.id && router.push(`/pigs/${row.id}`),
+      className: "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300",
+    },
     {
       label: "Edit",
       icon: Pencil,
@@ -438,6 +446,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
         sortOrder={sortOrder}
         onSort={handleSort}
         emptyState={emptyState}
+        onRowClick={(row: PigType) => row.id && router.push(`/pigs/${row.id}`)}
         className="rounded-3xl"
       />
 

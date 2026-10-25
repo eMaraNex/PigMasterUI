@@ -193,14 +193,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const googleAuth = async (): Promise<AuthResponse> => {
+  // The sign-in screens show a Terms/Privacy notice next to the Google button, so the
+  // acceptance is sent along and recorded for new accounts.
+  const googleAuth = async (options: { marketingConsent?: boolean } = {}): Promise<AuthResponse> => {
     if (!firebaseConfigured || !auth || !googleProvider) {
       return { success: false, message: "Google sign-in is not configured. Set the Firebase environment variables first." };
     }
     try {
       const credential = await signInWithPopup(auth, googleProvider);
       const idToken = await credential.user.getIdToken(true);
-      const response = await apiRequest.post("/auth/sso", { idToken });
+      const response = await apiRequest.post("/auth/sso", {
+        idToken,
+        privacy_policy_accepted: true,
+        marketing_consent: Boolean(options.marketingConsent),
+      });
       const userData = toUser(response.data?.data?.user ?? {});
       if (!userData.email) return { success: false, message: "Authentication response did not include a user." };
       setUser(userData);

@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Check, Crown, Zap, Star } from "lucide-react"
 import PageShell from "@/components/shared/page-shell"
+import Link from "next/link"
+import FaqList from "@/components/faq/faq-list"
+import { PRICING_FAQS } from "@/lib/faqs"
 import PaymentModal from "@/components/subscription/payment-modal"
 import ProtectedRoute from "@/components/auth/protected-route"
 import { useSubscription } from "@/lib/subscription-context"
@@ -200,41 +203,15 @@ function PricingContent() {
                 </div>
 
                 {/* FAQ Section */}
-                <div className="max-w-4xl mx-auto">
-                    <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-0 shadow-xl">
-                        <CardHeader>
-                            <CardTitle className="text-center text-xl sm:text-2xl text-gray-900 dark:text-gray-100">Frequently Asked Questions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6 px-4 sm:px-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Can I change plans anytime?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">What payment methods do you accept?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        We accept M-Pesa. You confirm the payment on your phone and your plan activates as soon as M-Pesa confirms it.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Is there a free trial?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Yes. Every new farm gets a full-access trial. After it ends you keep the Free plan with no time limit and can upgrade whenever you're ready.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Do you offer refunds?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Yes, we offer a 30-day money-back guarantee for all paid plans. No questions asked.
-                                    </p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                <section className="mx-auto max-w-3xl space-y-4" aria-labelledby="pricing-faq">
+                    <div className="text-center">
+                        <h2 id="pricing-faq" className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">Plans & payments FAQ</h2>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            More answers in the <Link href="/faq" className="text-blue-600 underline dark:text-blue-400">help centre</Link>.
+                        </p>
+                    </div>
+                    <FaqList categories={[{ id: "plans", title: "Plans & payments", items: PRICING_FAQS }]} showSearch={false} />
+                </section>
             </div>
 
             {/* Payment Modal */}

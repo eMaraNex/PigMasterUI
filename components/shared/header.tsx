@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-    Check, ChevronDown, CreditCard, Crown, Loader2, LogOut, PiggyBank, PlayCircle, Plus, Settings, Sparkles, User, Users,
+    Check, ChevronDown, CreditCard, Crown, HelpCircle, Loader2, LogOut, PiggyBank, PlayCircle, Plus, Settings, Sparkles, User, Users,
 } from "lucide-react";
 import CurrencySelector from "@/components/currency-selector";
 import ThemeToggle from "@/components/theme-toggle";
@@ -209,6 +209,9 @@ const Header: React.FC<HeaderProps> = ({
                                         <CreditCard className="mr-2 h-4 w-4" />Billing & plan
                                     </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => router.push("/faq")} className="cursor-pointer">
+                                    <HelpCircle className="mr-2 h-4 w-4" />Help & FAQ
+                                </DropdownMenuItem>
                                 {canAddRow && (
                                     <DropdownMenuItem onClick={handleAddRow} className="cursor-pointer md:hidden">
                                         <Plus className="mr-2 h-4 w-4" />Add row

@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Bell, Building2, CreditCard, Loader2, SlidersHorizontal, UserRound, Users } from "lucide-react"
+import { Bell, Building2, CreditCard, Loader2, ShieldCheck, SlidersHorizontal, UserRound, Users } from "lucide-react"
 import ProtectedRoute from "@/components/auth/protected-route"
 import PageShell from "@/components/shared/page-shell"
 import FarmSettings from "@/components/settings/farm-settings"
@@ -11,6 +11,7 @@ import TeamManagement from "@/components/settings/team-management"
 import BillingSettings from "@/components/settings/billing-settings"
 import NotificationPreferences from "@/components/settings/notification-preferences"
 import PreferencesSettings from "@/components/settings/preferences-settings"
+import PrivacySettings from "@/components/settings/privacy-settings"
 import { usePermissions } from "@/lib/permissions"
 
 const SECTIONS = [
@@ -20,6 +21,7 @@ const SECTIONS = [
   { key: "billing", label: "Billing & plan", description: "Plan and payments", icon: CreditCard },
   { key: "notifications", label: "Notifications", description: "Reminder emails", icon: Bell },
   { key: "preferences", label: "Display", description: "Currency and theme", icon: SlidersHorizontal },
+  { key: "privacy", label: "Privacy & data", description: "Consent and your data", icon: ShieldCheck },
 ] as const
 
 type SectionKey = (typeof SECTIONS)[number]["key"]
@@ -74,6 +76,7 @@ function SettingsContent() {
           {active === "billing" && <BillingSettings />}
           {active === "notifications" && <NotificationPreferences />}
           {active === "preferences" && <PreferencesSettings />}
+          {active === "privacy" && <PrivacySettings />}
         </section>
       </div>
     </PageShell>

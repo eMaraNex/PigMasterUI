@@ -46,6 +46,8 @@ interface TableProps {
     className?: string;
     rowClassName?: string;
     headerClassName?: string;
+    /** Opens the row (e.g. a detail page). Checkbox and action clicks do not trigger it. */
+    onRowClick?: (row: any) => void;
 }
 
 const Table: React.FC<TableProps> = ({
@@ -57,6 +59,7 @@ const Table: React.FC<TableProps> = ({
     selectedItems = [],
     onSelectionChange,
     idField = "id",
+    onRowClick,
     sortField,
     sortOrder = "asc",
     onSort,
@@ -168,10 +171,11 @@ const Table: React.FC<TableProps> = ({
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -20 }}
                                         transition={{ duration: 0.3, delay: index * 0.05 }}
-                                        className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors group ${rowClassName}`}
+                                        className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors group ${onRowClick ? "cursor-pointer" : ""} ${rowClassName}`}
+                                        onClick={() => onRowClick?.(row)}
                                     >
                                         {selectable && (
-                                            <td className="p-4">
+                                            <td className="p-4" onClick={event => event.stopPropagation()}>
                                                 <Checkbox
                                                     checked={selectedItems.includes(rowId)}
                                                     onCheckedChange={() => handleSelectItem(rowId)}
@@ -188,7 +192,7 @@ const Table: React.FC<TableProps> = ({
                                             </td>
                                         ))}
                                         {actions.length > 0 && (
-                                            <td className="p-4">
+                                            <td className="p-4" onClick={event => event.stopPropagation()}>
                                                 <div className="flex items-center justify-end gap-1">
                                                     {actions.map((action, actionIndex) => {
                                                         const shouldShow = action.condition ? action.condition(row) : true;

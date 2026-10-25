@@ -33,5 +33,5 @@ export interface AuthContextType {
   logout: () => Promise<AuthResponse>;
   forgotPassword: (email: string) => Promise<AuthResponse>;
   resetPassword: (params: { token: string; currentPassword: string; newPassword: string }) => Promise<AuthResponse>;
-  googleAuth: () => Promise<AuthResponse>;
+  googleAuth: (options?: { marketingConsent?: boolean }) => Promise<AuthResponse>;
 }

@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PiggyBank, Heart, Pill, AlertTriangle, Building } from "lucide-react";
 import PenLayout from "@/components/pen-layout";
-import PigProfile from "@/components/pig-profile";
 import BreedingManager from "@/components/breeding-manager";
 import { WhatsAppButton } from "@/components/whatsapp-button"
 import HealthTracker from "@/components/health-tracker";
@@ -44,6 +43,7 @@ import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
 import { api, useGetHealthSummaryQuery } from "@/lib/redux/api";
 import { usePermissions } from "@/lib/permissions";
 import OverviewReminders from "@/components/overview-reminders";
+import LegalLinks from "@/components/legal/legal-links";
 
 const TABS: { value: string; label: string; object?: string }[] = [
   { value: "overview", label: "Overview" },
@@ -62,8 +62,18 @@ const DashboardContent: React.FC = () => {
   const { showError } = useToast();
   const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier, ready: subscriptionReady, isFarmOwner } = useSubscription();
   const { can } = usePermissions();
-  const [selectedPig, setSelectedPig] = useState<PigType | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [activeTab, setActiveTabState] = useState<string>("overview");
+  // The open tab lives in the URL (?tab=pens) so Back from a pig, pen or other page returns to it.
+  const setActiveTab = useCallback((tab: string) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    if (tab === "overview") url.searchParams.delete("tab"); else url.searchParams.set("tab", tab);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab) setActiveTabState(tab);
+  }, []);
   const { data: healthSummary } = useGetHealthSummaryQuery(undefined, { skip: !user?.farm_id });
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [pens, setPens] = useState<any[]>([]);
@@ -450,11 +460,10 @@ const DashboardContent: React.FC = () => {
                       pens={pens}
                       pigs={pigs}
                       rows={rows}
-                      onPigSelect={setSelectedPig}
+                      onPigSelect={() => undefined}
                       onRowAdded={handleRowAdded}
                       handleAddRow={handleAddRow}
                     />
-                    {selectedPig && <PigProfile pig={selectedPig} onClose={() => setSelectedPig(null)} onTransferComplete={refreshPigsAndPens} />}
                   </>
                 ) : (
                   <UpgradePrompt feature="Pens" />
@@ -543,6 +552,7 @@ const DashboardContent: React.FC = () => {
             </Card>
           </>
         )}
+        <LegalLinks className="mt-10" />
         <WhatsAppButton
           phoneNumber={process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? ''}
           message="Hi! I have a question about your services."
