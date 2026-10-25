@@ -88,7 +88,7 @@ export default function PigTransferHistory({
       try {
 
         const response = await axios.get(
-          `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer-history`
+          `${utils.apiUrl}/pig-transfers/list?pig_id=${encodeURIComponent(pigId)}&limit=100`
         );
 
         if (response.data.success) {

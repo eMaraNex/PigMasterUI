@@ -52,7 +52,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
       if (!user?.farm_id) throw new Error("Farm ID missing");
       if (!user?.farm_id) throw new Error("Farm ID missing");
 
-      const data = await axios.delete(`${utils.apiUrl}/rows/delete/${user.farm_id}/${rowId}`, {
+      const data = await axios.delete(`${utils.apiUrl}/rows/delete/${rowId}`, {
         
       });
 
@@ -106,7 +106,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         return [];
       }
 
-      const response = await axios.get(`${utils.apiUrl}/pens/${farmId}/${penId}/history`, {
+      const response = await axios.get(`${utils.apiUrl}/pen-history/list`, { params: { pen_id: penId, limit: 200 },
         
       });
       const newRemovalRecords = response.data?.data || [];
@@ -187,7 +187,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
 
       if (!user?.farm_id) throw new Error("Farm ID missing");
       const response = await axios.post(
-        `${utils.apiUrl}/rows/expand`,
+        `${utils.apiUrl}/rows/expand/${row.id}`,
         {
           row_id: row.id ?? "",
           name: expandRowData.row_name,
@@ -231,7 +231,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         is_deleted: 0,
       };
       if (!user?.farm_id) throw new Error("Farm ID missing");
-      await axios.post(`${utils.apiUrl}/pens/${user?.farm_id}`, newPen, {
+      await axios.post(`${utils.apiUrl}/pens/create`, newPen, {
         
       });
       showSuccess('Success', `Pen ${penName} added successfully!`)
@@ -251,7 +251,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         return;
       }
       if (!user?.farm_id) throw new Error("Farm ID missing");
-      await axios.delete(`${utils.apiUrl}/pens/${user?.farm_id}/${pen.id}`, {
+      await axios.delete(`${utils.apiUrl}/pens/delete/${pen.id}`, {
         
       });
       showSuccess('Success', `Pen ${pen.name} removed successfully!`);

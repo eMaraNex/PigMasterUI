@@ -35,7 +35,7 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
   const fetchPigHealthRecords = async (pigId: string) => {
    
     try {
-      const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
+      const response = await axios.get(`${utils.apiUrl}/health-records/list`, { params: { pig_id: pigId, limit: 200 },
         })
       const records = response?.data?.data ?? response?.data
       setPigRecords(Array.isArray(records) ? records : [])
@@ -61,9 +61,8 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
       setLoading(true);
       try {
         // Fetch from API
-        const response = await axios.get(`${utils.apiUrl}/pigs/${pig.id}`, {
+        const response = await axios.get(`${utils.apiUrl}/pigs/list/${pig.id}`, {
           
-          params: { farm_id: user.farm_id },
         });
 
         if (response.data.success) {
@@ -90,7 +89,7 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
       if (!user?.farm_id) return;
 
       // Fetch from API
-      const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
+      const response = await axios.get(`${utils.apiUrl}/pens/list`, { params: { limit: 5000 },
         
       });
 
@@ -339,34 +338,34 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {pigData.feedingSchedule ? (
+                  {pigData.feeding_schedule ? (
                     <div className="p-3 bg-white/60 dark:bg-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600">
                       <div className="space-y-2">
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-900 dark:text-gray-100">Daily Amount:</span>
-                          <span className="text-gray-700 dark:text-gray-300">{pigData.feedingSchedule.dailyAmount}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{pigData.feeding_schedule.daily_amount}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-900 dark:text-gray-100">Feed Type:</span>
-                          <span className="text-gray-700 dark:text-gray-300">{pigData.feedingSchedule.feedType}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{pigData.feeding_schedule.feed_type}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-900 dark:text-gray-100">Feeding Times:</span>
                           <span className="text-gray-700 dark:text-gray-300">
-                            {pigData.feedingSchedule.times.join(", ")}
+                            {(Array.isArray(pigData.feeding_schedule.times) ? pigData.feeding_schedule.times : []).join(", ")}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-900 dark:text-gray-100">Last Fed:</span>
                           <span className="text-gray-700 dark:text-gray-300">
-                            {new Date(pigData.feedingSchedule.lastFed).toLocaleString()}
+                            {new Date(pigData.feeding_schedule.last_fed).toLocaleString()}
                           </span>
                         </div>
-                        {pigData.feedingSchedule.specialDiet && (
+                        {pigData.feeding_schedule.special_diet && (
                           <div className="flex justify-between">
                             <span className="font-medium text-gray-900 dark:text-gray-100">Special Diet:</span>
                             <span className="text-gray-700 dark:text-gray-300">
-                              {pigData.feedingSchedule.specialDiet}
+                              {pigData.feeding_schedule.special_diet}
                             </span>
                           </div>
                         )}
@@ -424,7 +423,7 @@ export default function PigProfile({ pig, onClose, onTransferComplete }: PigProf
         <TransferPigDialog
           isOpen={isTransferDialogOpen}
           onClose={() => setIsTransferDialogOpen(false)}
-          pigId={pigData.pig_id!}
+          pigId={pigData.id!}
           pigName={(pigData.name || pigData.pig_id)!}
           farmId={user.farm_id}
           currentPenId={pigData.pen_id}

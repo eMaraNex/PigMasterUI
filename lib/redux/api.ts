@@ -58,37 +58,37 @@ export const api = createApi({
       providesTags: ["CurrentUser"],
     }),
     getFarms: builder.query<Farm[], void>({
-      query: () => "/farms",
+      query: () => "/farms/list?limit=100",
       transformResponse: (response: ApiEnvelope<Farm[]>) => response.data,
       providesTags: ["Farm"],
     }),
     getFarm: builder.query<Farm, string>({
-      query: farmId => `/farms/${encodeURIComponent(farmId)}`,
+      query: farmId => `/farms/list/${encodeURIComponent(farmId)}`,
       transformResponse: (response: ApiEnvelope<Farm>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Farm", id: farmId }],
     }),
     getPigs: builder.query<Pig[], string>({
-      query: farmId => `/pigs/${encodeURIComponent(farmId)}`,
+      query: () => "/pigs/list?limit=2000",
       transformResponse: (response: ApiEnvelope<Pig[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Pig", id: farmId }],
     }),
     getRows: builder.query<Row[], string>({
-      query: farmId => `/rows/list/${encodeURIComponent(farmId)}`,
+      query: () => "/rows/list?limit=500",
       transformResponse: (response: ApiEnvelope<Row[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Rows", id: farmId }],
     }),
     getPens: builder.query<Pen[], string>({
-      query: farmId => `/pens/${encodeURIComponent(farmId)}`,
+      query: () => "/pens/list?limit=5000&include=pigs",
       transformResponse: (response: ApiEnvelope<Pen[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Pens", id: farmId }],
     }),
     getFarmAlerts: builder.query<unknown[], string>({
-      query: farmId => `/alerts/${encodeURIComponent(farmId)}`,
+      query: () => "/alerts/today",
       transformResponse: (response: ApiEnvelope<unknown[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Farm", id: `${farmId}-alerts` }],
     }),
     getFarmCalendar: builder.query<unknown[], string>({
-      query: farmId => `/alerts/calendar/${encodeURIComponent(farmId)}`,
+      query: () => "/alerts/list?limit=1000",
       transformResponse: (response: ApiEnvelope<unknown[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Farm", id: `${farmId}-calendar` }],
     }),
@@ -98,13 +98,13 @@ export const api = createApi({
       providesTags: ["Subscription"],
     }),
     createFarm: builder.mutation<Farm, Partial<Farm>>({
-      query: body => ({ url: "/farms", method: "POST", body }),
+      query: body => ({ url: "/farms/create", method: "POST", body }),
       transformResponse: (response: ApiEnvelope<Farm>) => response.data,
       invalidatesTags: ["Farm"],
     }),
     updateFarm: builder.mutation<Farm, { farmId: string; body: Partial<Farm> }>({
       query: ({ farmId, body }) => ({
-        url: `/farms/${encodeURIComponent(farmId)}`,
+        url: `/farms/update/${encodeURIComponent(farmId)}`,
         method: "PUT",
         body,
       }),
@@ -122,19 +122,53 @@ export const api = createApi({
       sortField: string;
       sortOrder: "asc" | "desc";
       searchTerm?: string;
-      filters: object;
+      filters: { gender?: string[]; breed?: string[]; isPregnant?: boolean; ageRange?: string };
     }>({
-      query: ({ farmId, ...body }) => ({
-        url: `/pigs/${encodeURIComponent(farmId)}/details`,
-        method: "POST",
-        body,
-      }),
-      transformResponse: (response: ApiEnvelope<PigListResult>) => response.data,
+      // Generic list (search, sort, filters, paging) plus whole-farm statistics.
+      async queryFn({ page, limit, sortField, sortOrder, searchTerm, filters }, _api, _extra, fetchWithBQ) {
+        const filter: { field: string; operator: string; value: unknown }[] = [];
+        if (filters.gender?.length) filter.push({ field: "gender", operator: "in", value: filters.gender });
+        if (filters.breed?.length) filter.push({ field: "breed", operator: "in", value: filters.breed });
+        if (filters.isPregnant !== undefined) filter.push({ field: "is_pregnant", operator: "eq", value: filters.isPregnant });
+        const monthsAgo = (months: number) => {
+          const date = new Date();
+          date.setMonth(date.getMonth() - months);
+          return date.toISOString().slice(0, 10);
+        };
+        if (filters.ageRange === "young") filter.push({ field: "birth_date", operator: "gt", value: monthsAgo(6) });
+        if (filters.ageRange === "adult") {
+          filter.push({ field: "birth_date", operator: "lte", value: monthsAgo(6) });
+          filter.push({ field: "birth_date", operator: "gt", value: monthsAgo(24) });
+        }
+        if (filters.ageRange === "senior") filter.push({ field: "birth_date", operator: "lte", value: monthsAgo(24) });
+        const [list, stats] = await Promise.all([
+          fetchWithBQ({
+            url: "/pigs/list",
+            method: "POST",
+            body: {
+              page, limit, search: searchTerm, filter,
+              sort: [{ field: sortField || "created_at", order: sortOrder === "asc" ? "ASC" : "DESC" }],
+              include: "pen_history,birth_history,health_records,feeding_schedule",
+            },
+          }),
+          fetchWithBQ("/pigs/statistics"),
+        ]);
+        if (list.error) return { error: list.error };
+        if (stats.error) return { error: stats.error };
+        const body = list.data as { data: Pig[]; total: number; page: number; limit: number };
+        return {
+          data: {
+            data: body.data,
+            pagination: { totalItems: body.total, page: body.page, limit: body.limit },
+            statistics: (stats.data as ApiEnvelope<PigListResult["statistics"]>).data,
+          },
+        };
+      },
       providesTags: (_result, _error, { farmId }) => [{ type: "Pig", id: farmId }],
     }),
     createPig: builder.mutation<Pig, { farmId: string; body: Partial<Pig> }>({
       query: ({ farmId, body }) => ({
-        url: `/pigs/${encodeURIComponent(farmId)}`,
+        url: "/pigs/create",
         method: "POST",
         body,
       }),
@@ -143,7 +177,7 @@ export const api = createApi({
     }),
     updatePig: builder.mutation<Pig, { farmId: string; pigId: string; body: Partial<Pig> }>({
       query: ({ farmId, pigId, body }) => ({
-        url: `/pigs/${encodeURIComponent(farmId)}/${encodeURIComponent(pigId)}`,
+        url: `/pigs/update/${encodeURIComponent(pigId)}`,
         method: "PUT",
         body,
       }),
@@ -156,8 +190,13 @@ export const api = createApi({
       date_to?: string;
     }>({
       query: ({ farmId, ...params }) => ({
-        url: `/earnings/${encodeURIComponent(farmId)}`,
-        params,
+        url: "/earnings/list",
+        params: {
+          limit: 1000,
+          ...(params.date_from || params.date_to
+            ? { "dateRange[field]": "date", "dateRange[from]": params.date_from, "dateRange[to]": params.date_to }
+            : {}),
+        },
       }),
       transformResponse: (response: ApiEnvelope<EarningsRecord[]>) => response.data,
       providesTags: (_result, _error, { farmId }) => [{ type: "Earnings", id: farmId }],

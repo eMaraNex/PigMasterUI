@@ -42,7 +42,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   })
   const getHealthStatus = (pig: Pig) => {
     const now = new Date()
-    const healthRecords = pig?.healthRecords || []
+    const healthRecords = pig?.health_records || []
 
     const overdueMedications = healthRecords.filter((record) => {
       if (record.nextDue) {
@@ -66,15 +66,15 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     return "good"
   }
 
-  const overduePigs = localPigs?.filter((r) => getHealthStatus(r) === "overdue") || []
-  const upcomingPigs = localPigs?.filter((r) => getHealthStatus(r) === "upcoming") || []
-  const healthyPigs = localPigs?.filter((r) => getHealthStatus(r) === "good") || []
+  const overduePigs = localPigs?.filter((r: any) => getHealthStatus(r) === "overdue") || []
+  const upcomingPigs = localPigs?.filter((r: any) => getHealthStatus(r) === "upcoming") || []
+  const healthyPigs = localPigs?.filter((r: any) => getHealthStatus(r) === "good") || []
 
  
   const fetchPigHealthRecords = async (pigId: string) => {
     setLoadingRecords(true)
     try {
-      const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
+      const response = await axios.get(`${utils.apiUrl}/health-records/list`, { params: { pig_id: pigId, limit: 200 },
         })
       const records = response?.data?.data ?? response?.data
       setPigRecords(Array.isArray(records) ? records : [])
@@ -89,13 +89,13 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const deleteHealthRecord = async (recordId:string) => {
     try {
       const resp = await axios.delete(
-        `${utils.apiUrl}/health/${recordId}`,
+        `${utils.apiUrl}/health-records/delete/${recordId}`,
         { }
       )
       const deleted = resp?.data?.data ?? resp?.data
       setLocalPigs(prev => prev.map(p => ({
         ...p,
-        healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id)
+        health_records: (p.health_records || []).filter(r => r.id !== deleted.id)
       })))
       setPigRecords(prev => prev.filter(r => r.id !== deleted.id))
       showSuccess('Success', 'Record deleted')
@@ -107,14 +107,14 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const handleUpdateHealthRecord = async (recordId: string) => {
     try {
       const resp = await axios.put(
-        `${utils.apiUrl}/health/${recordId}`,
+        `${utils.apiUrl}/health-records/update/${recordId}`,
         { status: 'completed' },
         { }
       )
       const updated = resp?.data?.data ?? resp?.data
       setLocalPigs(prev => prev.map(p => ({
         ...p,
-        healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r)
+        health_records: (p.health_records || []).map(r => r.id === updated.id ? updated : r)
       })))
       setPigRecords(prev => prev.map(r => r.id === updated.id ? updated : r))
       showSuccess('Success', 'Record marked as completed')
@@ -181,7 +181,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
           <CardContent className="bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-3 sm:p-6">
             <div className="space-y-3 sm:space-y-4">
               {overduePigs.map((pig) => {
-                const healthRecords = pig?.healthRecords || []
+                const healthRecords = pig?.health_records || []
                 return (
                   <div
                     key={pig.id}
@@ -221,18 +221,18 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                             const overdue = healthRecords.filter((record) => record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
                             const updatedRecords = [] as any[]
                             for (const r of overdue) {
-                              const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { })
+                              const resp = await axios.put(`${utils.apiUrl}/health-records/update/${r.id}`, { status: 'completed' }, { })
                               const updated = resp?.data?.data ?? resp?.data
                               updatedRecords.push(updated)
                             }
                             // update local state for this pig
                             setLocalPigs(prev => prev.map(p => {
                               if (p.pig_id !== pig.pig_id) return p
-                              const newRecords = (p.healthRecords || []).map(rec => {
+                              const newRecords = (p.health_records || []).map(rec => {
                                 const u = updatedRecords.find(x => x.id === rec.id)
                                 return u ? u : rec
                               })
-                              return { ...p, healthRecords: newRecords }
+                              return { ...p, health_records: newRecords }
                             }))
                             showSuccess('Success', 'Marked overdue record(s) as completed')
                           } catch (err: any) {
@@ -264,7 +264,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
           <CardContent className="bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-3 sm:p-6">
             <div className="space-y-3 sm:space-y-4">
               {upcomingPigs.map((pig) => {
-                const healthRecords = pig?.healthRecords || []
+                const healthRecords = pig?.health_records || []
                 return (
                   <div
                     key={pig.id}
@@ -293,8 +293,8 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                                   Due {new Date(record.nextDue!).toLocaleDateString()}
                                 </span>
                                 <div className="ml-2 flex items-center space-x-2">
-                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
-                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
+                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health-records/update/${record.id}`, { status: 'completed' }, { }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, health_records: (p.health_records || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
+                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health-records/delete/${record.id}`, { }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, health_records: (p.health_records || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
                                 </div>
                               </div>
                             ))}
@@ -337,10 +337,10 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                   e.preventDefault();
                   if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
                   try {
-                    const resp = await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { })
+                    const resp = await axios.post(`${utils.apiUrl}/health-records/create`, form, { })
                     const added = resp?.data?.data ?? resp?.data
                     // add record into localPigs
-                    setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, healthRecords: [added, ...(p.healthRecords || [])] } : p))
+                    setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, health_records: [added, ...(p.health_records || [])] } : p))
                     showSuccess('Success', 'Health record added')
                     setAddOpen(false)
                   } catch (err: any) {
@@ -410,7 +410,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
           <div className="space-y-3 sm:space-y-4">
             {localPigs?.map((pig) => {
               const status = getHealthStatus(pig)
-              const healthRecords = pig?.healthRecords || []
+              const healthRecords = pig?.health_records || []
               return (
                 <div
                   key={pig.id}

@@ -134,7 +134,9 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 },
             }
 
-            const res = await axios.post(`${utils.apiUrl}/payments`, payload)
+            const res = await axios.post(`${utils.apiUrl}/payments`, payload, {
+                headers: { "Idempotency-Key": crypto.randomUUID() },
+            })
 
             const created = res.data?.data
             if (!created?.id) throw new Error("No payment ID returned from server")

@@ -177,7 +177,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
         };
 
         const response = await axios.put(
-          `${utils.apiUrl}/rows/update/${user.farm_id}/${rowToEdit.id}`,
+          `${utils.apiUrl}/rows/update/${rowToEdit.id}`,
           updatedRow,
           { }
         );
@@ -245,7 +245,7 @@ export default function AddRowDialog({ open, onClose, onRowAdded, rowToEdit }: A
           occupied: 0
         };
 
-        const response = await axios.post(`${utils.apiUrl}/rows/create/${user.farm_id}`, newRow, {
+        const response = await axios.post(`${utils.apiUrl}/rows/create`, newRow, {
           
         });
 

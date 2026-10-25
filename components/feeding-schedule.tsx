@@ -33,7 +33,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
 
   useEffect(() => {
     if (user?.farm_id) {
-      axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user.farm_id}`, {
+      axios.get(`${utils.apiUrl}/feeding-records/list?record_type=weekly&record_type=monthly&limit=500`, {
         })
         .then(resp => setPeriodRecords(resp.data.data || []))
         .catch(err => console.error('Error fetching period records:', err))
@@ -42,7 +42,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
 
   useEffect(() => {
     if (user?.farm_id) {
-      axios.get(`${utils.apiUrl}/feeding/record/farm/${user.farm_id}?record_type=daily`, {
+      axios.get(`${utils.apiUrl}/feeding-records/list?record_type=daily&limit=500`, {
         })
         .then(resp => setDailyRecords(resp.data.data || []))
         .catch(err => console.error('Error fetching daily records:', err))
@@ -86,23 +86,23 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const getPigsInPen = (penId: string) => safePigs.filter(p => p.pen_id === penId)
 
   const getCurrentFeedingStatus = (pig: Pig) => {
-    if (!pig?.feedingSchedule?.lastFed) return "overdue"
+    if (!pig?.feeding_schedule?.last_fed) return "overdue"
     const now = new Date()
-    const lastFed = new Date(pig.feedingSchedule.lastFed)
+    const lastFed = new Date(pig.feeding_schedule.last_fed)
     const hoursSinceLastFed = (now.getTime() - lastFed.getTime()) / (1000 * 60 * 60)
     if (hoursSinceLastFed > 24) return "overdue"
     if (hoursSinceLastFed > 12) return "due"
     return "fed"
   }
 
-  const pigsWithIndividualFeeding = safePigs.filter(pig => pig?.feedingSchedule?.lastFed)
+  const pigsWithIndividualFeeding = safePigs.filter(pig => pig?.feeding_schedule?.last_fed)
   const overduePigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "overdue")
   const duePigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "due")
   const fedPigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "fed")
 
   const getTotalDailyFeed = () =>
     safePigs.reduce((total, pig) => {
-      const dailyAmount = pig?.feedingSchedule?.dailyAmount || "0g"
+      const dailyAmount = String(pig?.feeding_schedule?.daily_amount || "0g")
       const amount = Number.parseFloat(dailyAmount.replace(/[^\d.]/g, ""))
       return total + (isNaN(amount) ? 0 : amount)
     }, 0)
@@ -201,11 +201,11 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
   const visibleMonthlySummary = sortedMonthly.slice(0, visiblePeriodEntries)
 
   const refreshDailyRecords = () =>
-    axios.get(`${utils.apiUrl}/feeding/record/farm/${user!.farm_id}?record_type=daily`, {
+    axios.get(`${utils.apiUrl}/feeding-records/list?record_type=daily&limit=500`, {
       }).then(resp => setDailyRecords(resp.data.data || []))
 
   const refreshPeriodRecords = () =>
-    axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user!.farm_id}`, {
+    axios.get(`${utils.apiUrl}/feeding-records/list?record_type=weekly&record_type=monthly&limit=500`, {
       }).then(resp => setPeriodRecords(resp.data.data || []))
 
   const handleDailySubmit = async (e: React.FormEvent) => {
@@ -225,7 +225,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         pig_id: dailyForm.pig_id || null,
         pen_id: dailyForm.pen_id || null
       }
-      const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, {
+      const resp = await axios.post(`${utils.apiUrl}/feeding-records/create`, payload, {
         })
       const added = resp?.data?.data ?? resp?.data
       if (added?.feeding_time) {
@@ -233,12 +233,12 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
           setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pig_id === added.pig_id
             ? {
                 ...p,
-                feedingSchedule: {
-                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
-                  feedType: p.feedingSchedule?.feedType ?? '',
-                  times: p.feedingSchedule?.times ?? [],
-                  lastFed: added.feeding_time,
-                  specialDiet: p.feedingSchedule?.specialDiet,
+                feeding_schedule: {
+                  daily_amount: p.feeding_schedule?.daily_amount ?? '',
+                  feed_type: p.feeding_schedule?.feed_type ?? '',
+                  times: p.feeding_schedule?.times ?? [],
+                  last_fed: added.feeding_time,
+                  special_diet: p.feeding_schedule?.special_diet,
                 },
               }
             : p))
@@ -246,12 +246,12 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
           setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pen_id === added.pen_id
             ? {
                 ...p,
-                feedingSchedule: {
-                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
-                  feedType: p.feedingSchedule?.feedType ?? '',
-                  times: p.feedingSchedule?.times ?? [],
-                  lastFed: added.feeding_time,
-                  specialDiet: p.feedingSchedule?.specialDiet,
+                feeding_schedule: {
+                  daily_amount: p.feeding_schedule?.daily_amount ?? '',
+                  feed_type: p.feeding_schedule?.feed_type ?? '',
+                  times: p.feeding_schedule?.times ?? [],
+                  last_fed: added.feeding_time,
+                  special_diet: p.feeding_schedule?.special_diet,
                 },
               }
             : p))
@@ -279,7 +279,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         record_type: 'weekly',
         // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
       }
-      await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
+      await axios.post(`${utils.apiUrl}/feeding-records/create`, payload, {
         })
       showSuccess('Success', `Weekly feeding recorded (${weeklyForm.start_date} to ${weeklyForm.end_date})`)
       setAddOpen(false)
@@ -303,7 +303,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
         record_type: 'monthly',
         // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
       }
-      await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
+      await axios.post(`${utils.apiUrl}/feeding-records/create`, payload, {
         })
       showSuccess('Success', `Monthly feeding recorded (${monthlyForm.start_date} to ${monthlyForm.end_date})`)
       setAddOpen(false)
@@ -433,7 +433,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
                 <h4 className="font-medium text-base sm:text-lg text-gray-900 dark:text-gray-100">{timeSlot}</h4>
                 <div className="space-y-2">
                   {safePigs.filter(pig => {
-                    const times = pig?.feedingSchedule?.times || []
+                    const times = pig?.feeding_schedule?.times || []
                     return times.some((time: string) => {
                       if (index === 0) return time.includes("6:00") && time.includes("AM")
                       if (index === 1) return time.includes("2:00") && time.includes("PM")
@@ -441,7 +441,7 @@ export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
                     })
                   }).map(pig => {
                     const status = getCurrentFeedingStatus(pig)
-                    const dailyAmount = pig?.feedingSchedule?.dailyAmount || "N/A"
+                    const dailyAmount = pig?.feeding_schedule?.daily_amount || "N/A"
                     return (
                       <div key={pig?.id} className="flex items-center justify-between p-2 sm:p-3 border border-gray-200 dark:border-gray-600 rounded bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60">
                         <div className="flex-1 min-w-0">

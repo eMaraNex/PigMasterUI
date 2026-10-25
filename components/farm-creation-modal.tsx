@@ -93,7 +93,7 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
                 colors: colors ?? {},
             };
 
-            const response = await axios.post(`${utils.apiUrl}/farms`, payload, {
+            const response = await axios.post(`${utils.apiUrl}/farms/create`, payload, {
                 
             });
 

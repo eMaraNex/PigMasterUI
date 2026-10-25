@@ -25,6 +25,8 @@ export default function EarningsTracker() {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const [earnings, setEarnings] = useState<EarningsRecord[]>([]);
+  // Bumped after every write so the list reloads with the active date filter.
+  const [reloadKey, setReloadKey] = useState(0);
   const production = useAppSelector(state => state.production.byFarm[user?.farm_id ?? ""] ?? []);
   const [filteredEarnings, setFilteredEarnings] = useState<EarningsRecord[]>([]);
   const [dateFilter, setDateFilter] = useState("all");
@@ -71,8 +73,8 @@ export default function EarningsTracker() {
     if (!user?.farm_id) return;
     setDeletingId(earningId);
     try {
-      await axios.delete(`${utils.apiUrl}/earnings/${user.farm_id}/${earningId}`);
-      loadEarnings();
+      await axios.delete(`${utils.apiUrl}/earnings/delete/${earningId}`);
+      setReloadKey(key => key + 1);
     } catch (error) {
       console.error("Error deleting earning:", error);
     } finally {
@@ -166,7 +168,7 @@ export default function EarningsTracker() {
     }
 
     loadEarnings({ date_from, date_to });
-  }, [dateFilter, customDateRange, user?.farm_id]);
+  }, [dateFilter, customDateRange, user?.farm_id, reloadKey]);
 
   const loadEarnings = async (filters: { date_from?: string; date_to?: string } = {}) => {
     try {
@@ -253,12 +255,11 @@ export default function EarningsTracker() {
         farm_id: user.farm_id,
       };
 
-      await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, newEarning, {
+      await axios.post(`${utils.apiUrl}/earnings/create`, newEarning, {
         
       });
 
-      const updatedEarnings = [...earnings, newEarning];
-      setEarnings(updatedEarnings);
+      setReloadKey(key => key + 1);
       setEarningsForm({
         type: "other",
         amount: "",
@@ -307,12 +308,11 @@ export default function EarningsTracker() {
           farm_id: user.farm_id,
         };
 
-        await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, saleEarning, {
+        await axios.post(`${utils.apiUrl}/earnings/create`, saleEarning, {
           
         });
 
-        const updatedEarnings = [...earnings, saleEarning];
-        setEarnings(updatedEarnings);
+        setReloadKey(key => key + 1);
         showSuccess('Success', 'Production and sale recorded successfully!');
       } catch (error: any) {
         showError('Error', 'Error adding production sale earnings')

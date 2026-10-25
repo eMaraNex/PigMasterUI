@@ -62,9 +62,8 @@ export function isBreedingReady(pig: any): boolean {
 const normalizeUrl = (url: string | undefined) => (url ?? "").replace(/\/$/, "");
 
 export const baseUrl =
-  process.env.NODE_ENV === "production"
-    ? process.env.NEXT_PUBLIC_API_URL ?? ""
-    : "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:5000");
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;

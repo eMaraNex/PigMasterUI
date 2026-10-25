@@ -120,7 +120,7 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     };
 
     try {
-      const response = await axios.post(`${utils.apiUrl}/pigs/${user.farm_id}`, newPig, {
+      const response = await axios.post(`${utils.apiUrl}/pigs/create`, newPig, {
         
       });
       if (response.data.success) {
@@ -144,7 +144,7 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     if (!user?.farm_id) return;
     try {
       const response = await axios.put(
-        `${utils.apiUrl}/farms/${user.farm_id}`,
+        `${utils.apiUrl}/farms/update/${user.farm_id}`,
         { breeds: newBreeds },
         { }
       );
@@ -165,7 +165,7 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     if (!user?.farm_id) return;
     try {
       const response = await axios.put(
-        `${utils.apiUrl}/farms/${user.farm_id}`,
+        `${utils.apiUrl}/farms/update/${user.farm_id}`,
         { colors: newColors },
         { }
       );

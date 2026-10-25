@@ -152,9 +152,11 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
             }
 
             // Call API using axios similar to the example
+            // A fresh key per attempt; the API also reuses a matching pending payment, so double clicks never send two prompts.
             const response = await axios.post(
                 `${utils.apiUrl}/payments`,
-                fullPayload
+                fullPayload,
+                { headers: { "Idempotency-Key": crypto.randomUUID() } }
             )
 
             const data = response.data;

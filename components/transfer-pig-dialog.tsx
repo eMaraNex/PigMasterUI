@@ -134,7 +134,7 @@ export default function TransferPigDialog({
     try {
 
       const response = await axios.post(
-        `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer`,
+        `${utils.apiUrl}/pigs/transfer/${pigId}`,
         {
           new_pen_id: selectedPenId,
           transfer_reason: transferReason,

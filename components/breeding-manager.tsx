@@ -108,7 +108,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
       );
       setPigs(updatedPigs);
 
-      const breedResponse = await axios.post(`${utils.apiUrl}/breeds/${user.farm_id}`, {
+      const breedResponse = await axios.post(`${utils.apiUrl}/breeding-records/create`, {
         farm_id: user.farm_id,
         sow_id: sow.pig_id,
         boar_id: boar.pig_id,
@@ -142,7 +142,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
     }
     setIsFetchingPigs(true);
     try {
-      const response = await axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
+      const response = await axios.get(`${utils.apiUrl}/pigs/list`, { params: { limit: 2000 },
         
       });
       const newPigs = response.data.data || [];
@@ -167,7 +167,7 @@ export default function BreedingManager({ pigs: initialPigs, onPigsUpdate, pens 
     }
     setIsLoadingRecords(true);
     try {
-      const response = await axios.get(`${utils.apiUrl}/breeds/${user.farm_id}`, {
+      const response = await axios.get(`${utils.apiUrl}/breeding-records/list`, { params: { limit: 500 },
         
       });
       const records = response.data.data || [];

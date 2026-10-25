@@ -111,7 +111,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
       };
 
       const pigResponse = await axios.put(
-        `${utils.apiUrl}/pigs/${user.farm_id}/${pig.pig_id}`,
+        `${utils.apiUrl}/pigs/update/${pig.id}`,
         updatedPig,
         { }
       );
@@ -123,7 +123,7 @@ export default function EditPigDialog({ pig, onClose, onUpdate }: EditPigDialogP
       if (isPregnantAndServed) {
         const matingDate = new Date(formData.mating_date).toISOString().split('T')[0];
         const expectedBirthDate = new Date(new Date(matingDate).getTime() + (utils.PREGNANCY_DURATION_DAYS || 114) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        await axios.post(`${utils.apiUrl}/breeds/${user.farm_id}`,
+        await axios.post(`${utils.apiUrl}/breeding-records/create`,
           {
             farm_id: user.farm_id,
             sow_id: pig.pig_id,

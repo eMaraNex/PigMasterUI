@@ -70,7 +70,7 @@ export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemo
         }),
       };
 
-      await axios.post(`${utils.apiUrl}/pigs/pig_removals/${user.farm_id}/${pig.pig_id}`, removalRecord, {
+      await axios.delete(`${utils.apiUrl}/pigs/delete/${pig.id}`, { data: removalRecord,
         
       });
 
@@ -92,13 +92,13 @@ export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemo
           pen_id,
         };
 
-        await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, earningsRecord, {
+        await axios.post(`${utils.apiUrl}/earnings/create`, earningsRecord, {
           
         });
       }
 
       // Fetch the latest removal history for the pen
-      const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}/${pen_id ?? removalRecord?.pen_id}/history`, {
+      const response = await axios.get(`${utils.apiUrl}/pen-history/list`, { params: { pen_id: pen_id ?? removalRecord?.pen_id, limit: 200 },
         
       });
       const newRemovalRecords = response.data?.data || [];

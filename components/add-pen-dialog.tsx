@@ -66,9 +66,7 @@ export default function AddPenDialog() {
     }
 
     const newPen = {
-      id: `${formData.rowName}-${formData.level}${formData.position}`,
-      farm_id: user.farm_id,
-      row_name: formData.rowName,
+      row_id: rows.find((row) => row.name === formData.rowName)?.id,
       level: formData.level,
       position: Number.parseInt(formData.position),
       size: formData.size,
@@ -77,11 +75,10 @@ export default function AddPenDialog() {
         .split(",")
         .map((f) => f.trim())
         .filter((f) => f),
-      is_occupied: false,
     }
 
     try {
-      const response = await axios.post(`${utils.apiUrl}/pens/${user.farm_id}`, newPen)
+      const response = await axios.post(`${utils.apiUrl}/pens/create`, newPen)
       if (response.data.success) {
         dispatch(api.util.invalidateTags([{ type: "Pens", id: user.farm_id }]))
         setOpen(false)

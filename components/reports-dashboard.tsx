@@ -30,10 +30,10 @@ export default function ReportsDashboard({ pens }: ReportsProps) {
     try {
 
       const [pigsResponse, earningsResponse] = await Promise.all([
-        axios.get(`${utils.apiUrl}/pigs/${user?.farm_id}`, {
+        axios.get(`${utils.apiUrl}/pigs/list`, { params: { limit: 2000 },
           
         }),
-        axios.get(`${utils.apiUrl}/earnings/${user?.farm_id}`, {
+        axios.get(`${utils.apiUrl}/earnings/list`, { params: { limit: 1000 },
           
         }),
       ]);
