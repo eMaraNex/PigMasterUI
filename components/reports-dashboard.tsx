@@ -6,8 +6,13 @@ import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, T
 import { Baby, Download, HeartPulse, Loader2, PiggyBank, Skull, TrendingUp, Wheat } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DateRangePicker, presetRange, rangeToParams, type DateRange } from "@/components/shared/date-range-picker";
 import { useCurrency } from "@/lib/currency-context";
 import { apiRequest } from "@/lib/api/client";
+import { downloadExport, exportErrorMessage, type ExportFormat } from "@/lib/download";
+import { usePermissions } from "@/lib/permissions";
+import { useToast } from "@/lib/toast-provider";
 import type { ReportsProps } from "@/types";
 
 type FarmReport = {
@@ -25,13 +30,6 @@ type FarmReport = {
   health: { type: string; records: number; pigs: number }[];
   monthly: { month: string; income: number; feed_kg: number }[];
 };
-
-const PERIODS = [
-  { value: "30", label: "Last 30 days" },
-  { value: "90", label: "Last 3 months" },
-  { value: "180", label: "Last 6 months" },
-  { value: "365", label: "Last 12 months" },
-];
 
 const pretty = (value: string) => value.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
 
@@ -75,8 +73,11 @@ function BreakdownTable({ title, rows, columns }: { title: string; rows: Record<
 /** Farm performance report; every figure is aggregated by the API, so it scales with herd size. */
 export default function ReportsDashboard(_props: ReportsProps) {
   const { formatAmount: formatBase, convertToBaseCurrency } = useCurrency();
-  const [period, setPeriod] = useState("180");
+  const [range, setRange] = useState<DateRange>(() => presetRange("last_6_months"));
   const [report, setReportState] = useState<FarmReport | null>(null);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const { can } = usePermissions();
+  const { showError } = useToast();
   // Report money is in the farm's currency; convert it into the user's display currency.
   const formatAmount = (amount: number) => formatBase(convertToBaseCurrency(amount, (report?.currency ?? "KES") as never));
   const [loading, setLoading] = useState(true);
@@ -86,32 +87,22 @@ export default function ReportsDashboard(_props: ReportsProps) {
     setLoading(true);
     setError(null);
     apiRequest
-      .get("/reports/summary", { params: { from: dayjs().subtract(Number(period), "day").toISOString(), to: dayjs().toISOString() } })
+      .get("/reports/summary", { params: rangeToParams(range) })
       .then(response => setReportState(response.data.data))
       .catch(err => setError(err?.response?.data?.message ?? "Could not load the report"))
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [range]);
 
-  const exportCsv = () => {
-    if (!report) return;
-    const lines = [
-      ["Month", "Income", "Feed used (kg)"].join(","),
-      ...report.monthly.map(row => [row.month, row.income, row.feed_kg].join(",")),
-      "",
-      ["Metric", "Value"].join(","),
-      ["Pigs on farm", report.herd.total],
-      ["Piglets born", report.breeding.piglets_born],
-      ["Average litter size", report.breeding.avg_litter_size ?? ""],
-      ["Pre-weaning mortality %", report.breeding.pre_weaning_mortality_pct ?? ""],
-      ["Deaths", report.mortality.deaths],
-      ["Pigs sold", report.sales.pigs_sold],
-      ["Income", report.finance.income],
-      ["Feed cost (estimated)", report.finance.feed_cost],
-      ["Margin over feed", report.finance.margin_over_feed],
-    ].map(line => (Array.isArray(line) ? line.join(",") : line));
-    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    Object.assign(document.createElement("a"), { href: url, download: `farm-report-${dayjs().format("YYYY-MM-DD")}.csv` }).click();
-    URL.revokeObjectURL(url);
+  // The API builds the file (a multi-sheet workbook for Excel) so large farms export in full.
+  const exportReport = async (format: ExportFormat) => {
+    setExporting(format);
+    try {
+      await downloadExport("/reports/export", { ...rangeToParams(range), format }, `farm-report.${format}`);
+    } catch (err) {
+      showError("Export failed", await exportErrorMessage(err));
+    } finally {
+      setExporting(null);
+    }
   };
 
   return (
@@ -123,10 +114,21 @@ export default function ReportsDashboard(_props: ReportsProps) {
         </div>
         <div className="flex items-center gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-          <select value={period} onChange={e => setPeriod(e.target.value)} className="h-9 rounded-md border bg-white px-3 text-sm dark:bg-gray-900" aria-label="Report period">
-            {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!report}><Download className="mr-1.5 h-4 w-4" />CSV</Button>
+          <DateRangePicker value={range} onChange={setRange} />
+          {can("reports", "export") && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={!report || exporting !== null}>
+                  {exporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportReport("xlsx")}>Excel (.xlsx)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportReport("csv")}>CSV (.csv)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 

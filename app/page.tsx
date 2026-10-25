@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,8 +32,6 @@ import * as utils from "@/lib/utils";
 import type { Pig as PigType } from "@/types";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/shared/sidebar";
-import { Alert, ServerAlert } from "@/types";
-import { penNamesConversion } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import FarmCreationModal from "@/components/farm-creation-modal";
 import RowBanner from "@/components/row-banner";
@@ -44,11 +42,26 @@ import UpgradePrompt from "@/components/shared/upgradeprompt";
 import { useAppDispatch } from "@/lib/redux/hooks";
 import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
 import { api, useGetHealthSummaryQuery } from "@/lib/redux/api";
+import { usePermissions } from "@/lib/permissions";
+import OverviewReminders from "@/components/overview-reminders";
+
+const TABS: { value: string; label: string; object?: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "pens", label: "Pens", object: "pens" },
+  { value: "breeding", label: "Breeding", object: "breeding_records" },
+  { value: "health", label: "Health", object: "health_records" },
+  { value: "feeding", label: "Feeding", object: "feeding_records" },
+  { value: "earnings", label: "Earnings", object: "earnings" },
+  { value: "reports", label: "Reports", object: "reports" },
+  { value: "analytics", label: "Analytics", object: "reports" },
+  { value: "calender", label: "Calendar", object: "alerts" },
+];
 
 const DashboardContent: React.FC = () => {
   const { user, logout } = useAuth();
   const { showError } = useToast();
-  const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier } = useSubscription();
+  const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier, ready: subscriptionReady, isFarmOwner } = useSubscription();
+  const { can } = usePermissions();
   const [selectedPig, setSelectedPig] = useState<PigType | null>(null);
   const [activeTab, setActiveTab] = useState<string>("overview");
   const { data: healthSummary } = useGetHealthSummaryQuery(undefined, { skip: !user?.farm_id });
@@ -59,13 +72,14 @@ const DashboardContent: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showMandatoryRowModal, setShowMandatoryRowModal] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState<boolean>(false);
 
   const hasFarm = Boolean(user?.farm_id);
   const hasRow = rows?.length > 0;
+  // Tabs the user's farm role can open (the API enforces the same permissions).
+  const visibleTabs = useMemo(() => TABS.filter(tab => !tab.object || can(tab.object, "read")), [can]);
   const [breedingRefreshTrigger, setBreedingRefreshTrigger] =
     useState<number>(0);
   const [showAddPigletDialog, setShowAddPigletDialog] = useState<boolean>(false);
@@ -104,11 +118,10 @@ const DashboardContent: React.FC = () => {
 
     try {
       const farmKey = user.farm_id;
-      const [newRows, newPens, pigsResponse, serverAlertsResponse] = await Promise.all([
+      const [newRows, newPens, pigsResponse] = await Promise.all([
         dispatch(api.endpoints.getRows.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
         dispatch(api.endpoints.getPens.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
         dispatch(api.endpoints.getPigs.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
-        dispatch(api.endpoints.getFarmAlerts.initiate(farmKey, { forceRefetch: true, subscribe: false })).unwrap(),
       ]);
       let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
@@ -122,23 +135,9 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const serverAlerts: ServerAlert[] = serverAlertsResponse as ServerAlert[] || [];
-
-      const mappedAlerts: Alert[] = serverAlerts.map((alert) => ({
-        type:
-          alert.alert_type === "birth"
-            ? "Birth Expected"
-            : alert.alert_type === "medication"
-              ? "Medication Due"
-              : alert.name,
-        message: alert.message,
-        variant: alert.severity === "high" ? "destructive" : alert.severity === "medium" ? "secondary" : "outline",
-      }))
-
       setRows(newRows);
       setPens(newPens);
       setPigs(newPigs);
-      setAlerts(mappedAlerts);
       setDataLoaded(true);
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -203,24 +202,14 @@ const DashboardContent: React.FC = () => {
 
   useEffect(() => {
     if (tabsListRef.current) {
-      const tabIndex = [
-        "overview",
-        "pens",
-        "breeding",
-        "health",
-        "feeding",
-        "earnings",
-        "reports",
-        "analytics",
-        "calender",
-      ].indexOf(activeTab);
-      const tabWidth = 70;
+      const tabIndex = visibleTabs.findIndex(tab => tab.value === activeTab);
+      const tabWidth = 76;
       tabsListRef.current.scrollTo({
         left: tabIndex * tabWidth,
         behavior: "smooth",
       });
     }
-  }, [activeTab]);
+  }, [activeTab, visibleTabs]);
 
   const handleRowAdded = useCallback(() => {
     setDataLoaded(false);
@@ -300,30 +289,39 @@ const DashboardContent: React.FC = () => {
 
       <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {user && !user.email_verified && <EmailVerificationBanner />}
-        {isTrialActive && (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
+        {subscriptionReady && isTrialActive && (
+          <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
             <p className="font-medium">
-              You&apos;re on a full-access trial. {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left to explore every feature.
+              Full-access trial: {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left to explore every feature.
             </p>
+            {isFarmOwner && (
+              <Button size="sm" variant="outline" onClick={() => router.push("/pricing")} className="rounded-xl border-amber-300 bg-white/70 text-amber-900 hover:bg-white">
+                Choose a plan
+              </Button>
+            )}
           </div>
         )}
-        {!isTrialActive && tier === "free" && (
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 text-sm text-rose-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        {subscriptionReady && !isTrialActive && tier === "free" && (
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 text-sm text-rose-900 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-200">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-rose-500" />
               <div>
                 <p className="font-semibold">Your trial has ended.</p>
-                <p className="text-xs text-rose-800">
-                  Upgrade to keep using breeding, analytics, and other premium tools.
+                <p className="text-xs text-rose-800 dark:text-rose-300">
+                  {isFarmOwner
+                    ? "Upgrade to keep using breeding, analytics, and other premium tools."
+                    : "Ask the farm owner to upgrade to keep using premium tools."}
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => router.push("/pricing")}
-              className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs sm:text-sm"
-            >
-              View Plans
-            </Button>
+            {isFarmOwner && (
+              <Button
+                onClick={() => router.push("/pricing")}
+                className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs sm:text-sm"
+              >
+                View Plans
+              </Button>
+            )}
           </div>
         )}
         {hasFarm ? (
@@ -336,70 +334,17 @@ const DashboardContent: React.FC = () => {
             >
               <TabsList
                 ref={tabsListRef}
-                key={activeTab}
-                className="inline-flex justify-start w-full md:grid md:grid-cols-9 overflow-x-auto scroll-smooth whitespace-nowrap bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent relative shadow-sm md:shadow-none"
+                className="inline-flex w-full justify-start overflow-x-auto scroll-smooth whitespace-nowrap bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent relative shadow-sm md:shadow-none"
               >
-                <TabsTrigger
-                  value="overview"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pens"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Pens
-                </TabsTrigger>
-                <TabsTrigger
-                  value="breeding"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Breeding
-                </TabsTrigger>
-                <TabsTrigger
-                  value="health"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Health
-                </TabsTrigger>
-                <TabsTrigger
-                  value="feeding"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Feeding
-                </TabsTrigger>
-                <TabsTrigger
-                  value="earnings"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Earnings
-                </TabsTrigger>
-                <TabsTrigger
-                  value="reports"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Reports
-                </TabsTrigger>
-                <TabsTrigger
-                  value="analytics"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Analytics
-                </TabsTrigger>
-                <TabsTrigger
-                  value="calender"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Calender
-                </TabsTrigger>
-                {/* <TabsTrigger
-                value="pricing"
-                className="flex-shrink-0 px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white whitespace-nowrap"
-                onClick={() => router.push("/pricing")}
-              >
-                Pricing
-              </TabsTrigger> */}
+                {visibleTabs.map(tab => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="flex-1 min-w-[76px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6 sm:space-y-8">
@@ -492,56 +437,7 @@ const DashboardContent: React.FC = () => {
                         </CardContent>
                       </Card>
                     </div>
-                    <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20">
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2 text-sm sm:text-base dark:text-gray-200">
-                          <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
-                          <span>Recent Alerts & Reminders</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3 sm:space-y-4">
-                          {alerts.map((alert, index) => (
-                            <div
-                              key={index}
-                              className={`flex items-center justify-between p-3 sm:p-4 rounded-xl border ${alert.variant === "destructive"
-                                ? "bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-800"
-                                : alert.variant === "secondary"
-                                  ? "bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border-amber-200 dark:border-amber-800"
-                                  : "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800"
-                                }`}
-                            >
-                              <div>
-                                <p className="font-medium text-sm sm:text-base">
-                                  {alert.type === "Medication Due" ||
-                                    (alert.type === "Birth Expected" &&
-                                      alert.variant === "destructive") ? (
-                                    <span className="text-red-800 dark:text-red-300">
-                                      {alert.type}
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-800 dark:text-amber-300">{alert.type}</span>
-                                  )}
-                                </p>
-                                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                                  {penNamesConversion(pens, alert.message)}
-                                </p>
-                              </div>
-                              <Badge variant={alert.variant} className="text-xs">
-                                {alert.variant === "destructive"
-                                  ? "Overdue"
-                                  : alert.variant === "secondary"
-                                    ? "Upcoming"
-                                    : "Ready"}
-                              </Badge>
-                            </div>
-                          ))}
-                          {alerts.length === 0 && (
-                            <p className="text-gray-600 dark:text-gray-400 text-sm">No alerts at this time.</p>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <OverviewReminders onOpenTab={setActiveTab} />
                   </>
                 ) : (
                   <UpgradePrompt feature="Overview" />

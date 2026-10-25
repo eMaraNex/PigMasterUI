@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ALL_TIME, DateRangePicker, describeRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker";
+import { ExportMenu } from "@/components/shared/export-menu";
+import { usePermissions } from "@/lib/permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, Calendar, Filter, Download, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, Filter, Trash2 } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest as axios } from "@/lib/api/client";
@@ -29,8 +32,8 @@ export default function EarningsTracker() {
   const [reloadKey, setReloadKey] = useState(0);
   const production = useAppSelector(state => state.production.byFarm[user?.farm_id ?? ""] ?? []);
   const [filteredEarnings, setFilteredEarnings] = useState<EarningsRecord[]>([]);
-  const [dateFilter, setDateFilter] = useState("all");
-  const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
+  const [range, setRange] = useState<DateRange>(ALL_TIME);
+  const { can } = usePermissions();
   const [addEarningsOpen, setAddEarningsOpen] = useState(false);
   const [addProductionOpen, setAddProductionOpen] = useState(false);
   const { showSuccess, showError, showWarn } = useToast();
@@ -118,57 +121,12 @@ export default function EarningsTracker() {
     }
   };
 
+  // Reload from the server whenever the date range changes or a record is written.
   useEffect(() => {
-    if (user?.farm_id) {
-      loadEarnings();
-    }
-  }, [user?.farm_id]);
-
-  // When the date filter or custom date range changes we request server-side filtered data
-  useEffect(() => {
-    // If user isn't loaded, bail
     if (!user?.farm_id) return;
-
-    // If the filter is 'all' just fetch everything from server
-    if (dateFilter === 'all') {
-      loadEarnings();
-      return;
-    }
-
-    // For other filters compute date_from/date_to and call loadEarnings
-    const now = new Date();
-    let date_from: string | undefined;
-    let date_to: string | undefined;
-
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-
-    switch (dateFilter) {
-      case 'today':
-        date_from = fmt(now);
-        date_to = fmt(now);
-        break;
-      case 'week':
-        date_from = fmt(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
-        date_to = fmt(now);
-        break;
-      case 'month':
-        date_from = fmt(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
-        date_to = fmt(now);
-        break;
-      case 'year':
-        date_from = fmt(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-        date_to = fmt(now);
-        break;
-      case 'custom':
-        if (customDateRange.start && customDateRange.end) {
-          date_from = customDateRange.start;
-          date_to = customDateRange.end;
-        }
-        break;
-    }
-
-    loadEarnings({ date_from, date_to });
-  }, [dateFilter, customDateRange, user?.farm_id, reloadKey]);
+    const { from, to } = rangeToDates(range);
+    loadEarnings({ date_from: from, date_to: to });
+  }, [range, user?.farm_id, reloadKey]);
 
   const loadEarnings = async (filters: { date_from?: string; date_to?: string } = {}) => {
     try {
@@ -191,42 +149,6 @@ export default function EarningsTracker() {
     if (user?.farm_id) {
       dispatch(setFarmProduction({ farmId: user.farm_id, records: data }));
     }
-  };
-
-  const filterEarnings = () => {
-    let filtered = [...earnings];
-    const now = new Date();
-
-    switch (dateFilter) {
-      case "today":
-        filtered = earnings.filter((e) => {
-          const earningDate = new Date(e.date);
-          return earningDate.toDateString() === now.toDateString();
-        });
-        break;
-      case "week":
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        filtered = earnings.filter((e) => new Date(e.date) >= weekAgo);
-        break;
-      case "month":
-        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        filtered = earnings.filter((e) => new Date(e.date) >= monthAgo);
-        break;
-      case "year":
-        const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-        filtered = earnings.filter((e) => new Date(e.date) >= yearAgo);
-        break;
-      case "custom":
-        if (customDateRange.start && customDateRange.end) {
-          filtered = earnings.filter((e) => {
-            const earningDate = new Date(e.date);
-            return earningDate >= new Date(customDateRange.start) && earningDate <= new Date(customDateRange.end);
-          });
-        }
-        break;
-    }
-
-    setFilteredEarnings(filtered);
   };
 
   const handleAddEarnings = async (e: React.FormEvent) => {
@@ -372,7 +294,7 @@ export default function EarningsTracker() {
               {formatAmount(getTotalEarnings())}
             </div>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-              {dateFilter === "all" ? "All time" : `${dateFilter.charAt(0).toUpperCase() + dateFilter.slice(1)} period`}
+              {describeRange(range)}
             </p>
           </CardContent>
         </Card>
@@ -886,56 +808,18 @@ export default function EarningsTracker() {
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-xs sm:text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                  <SelectItem value="year">This Year</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {dateFilter === "custom" && (
-              <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                <Input
-                  type="date"
-                  value={customDateRange.start}
-                  onChange={(e) =>
-                    setCustomDateRange({
-                      ...customDateRange,
-                      start: e.target.value,
-                    })
-                  }
-                  className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
-                />
-                <span className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm">to</span>
-                <Input
-                  type="date"
-                  value={customDateRange.end}
-                  onChange={(e) =>
-                    setCustomDateRange({
-                      ...customDateRange,
-                      end: e.target.value,
-                    })
-                  }
-                  className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
-                />
-              </div>
+            <DateRangePicker value={range} onChange={setRange} allowAll className="w-full sm:w-60" />
+            {can("earnings", "export") && (
+              <ExportMenu
+                path="/earnings/export"
+                filename="earnings"
+                className="h-9 w-full sm:w-auto"
+                params={{
+                  sort: [{ field: "date", order: "desc" }],
+                  ...(range.preset !== "all" ? { dateRange: { field: "date", ...rangeToDates(range) } } : {}),
+                }}
+              />
             )}
-            <Button
-              variant="outline"
-              className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 w-full sm:w-auto"
-            >
-              <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-              <span className="text-xs sm:text-sm">Export</span>
-            </Button>
           </div>
         </CardContent>
       </Card>

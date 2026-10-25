@@ -12,6 +12,9 @@ import { apiRequest } from "@/lib/api/client"
 import { useToast } from "@/lib/toast-provider"
 import { useCurrency } from "@/lib/currency-context"
 import type { FeedingScheduleProps } from "@/types"
+import { DateRangePicker, presetRange, rangeToParams, type DateRange } from "@/components/shared/date-range-picker"
+import { ExportMenu } from "@/components/shared/export-menu"
+import { usePermissions } from "@/lib/permissions"
 
 type GuideEntry = { label: string; feed_type: string; kg_per_day: number }
 type PlanPen = {
@@ -215,8 +218,13 @@ export default function FeedingSchedule(_props: FeedingScheduleProps) {
 function FeedingHistory() {
   const { showError } = useToast()
   const [page, setPage] = useState(1)
-  const [from, setFrom] = useState(dayjs().subtract(30, "day").format("YYYY-MM-DD"))
-  const [to, setTo] = useState(dayjs().format("YYYY-MM-DD"))
+  const [range, setRange] = useState<DateRange>(() => presetRange("last_30_days"))
+  const { can } = usePermissions()
+  const { from, to } = rangeToParams(range)
+  const filter = [
+    ...(from ? [{ field: "feeding_time", operator: "gte", value: from }] : []),
+    ...(to ? [{ field: "feeding_time", operator: "lte", value: to }] : []),
+  ]
   const [records, setRecords] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -225,10 +233,7 @@ function FeedingHistory() {
     setLoading(true)
     apiRequest.post("/feeding-records/list", {
       page, limit: PAGE_SIZE, sort: [{ field: "feeding_time", order: "DESC" }],
-      filter: [
-        { field: "feeding_time", operator: "gte", value: `${from}T00:00:00` },
-        { field: "feeding_time", operator: "lte", value: `${to}T23:59:59` },
-      ],
+      filter,
     })
       .then(response => { setRecords(response.data.data); setTotal(response.data.total) })
       .catch(err => showError("Error", err?.response?.data?.message || "Could not load feeding history"))
@@ -240,10 +245,15 @@ function FeedingHistory() {
     <Card className="bg-white/70 dark:bg-gray-800/70">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
         <CardTitle className="text-base">Feeding history</CardTitle>
-        <div className="flex items-center gap-2 text-xs">
-          <Input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} className="h-8 w-36" aria-label="From" />
-          <span>to</span>
-          <Input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} className="h-8 w-36" aria-label="To" />
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker value={range} onChange={next => { setRange(next); setPage(1) }} allowAll />
+          {can("feeding_records", "export") && (
+            <ExportMenu
+              path="/feeding-records/export"
+              filename="feeding-records"
+              params={{ filter, sort: [{ field: "feeding_time", order: "DESC" }] }}
+            />
+          )}
         </div>
       </CardHeader>
       <CardContent>

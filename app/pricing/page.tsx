@@ -4,10 +4,10 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, Crown, Zap, Star, ArrowLeft } from "lucide-react"
+import { Check, Crown, Zap, Star } from "lucide-react"
+import PageShell from "@/components/shared/page-shell"
 import PaymentModal from "@/components/subscription/payment-modal"
 import ProtectedRoute from "@/components/auth/protected-route"
-import { useRouter } from "next/navigation"
 import { useSubscription } from "@/lib/subscription-context"
 import TillPaymentModal from "@/components/subscription/till-payment-modal";
 
@@ -75,8 +75,7 @@ const plans = [
 ]
 
 function PricingContent() {
-    const router = useRouter()
-    const { tier, upgradeTo } = useSubscription()
+    const { tier, upgradeTo, isTrialActive } = useSubscription()
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
     const [showPayment, setShowPayment] = useState(false)
 
@@ -97,37 +96,17 @@ function PricingContent() {
     }
 
     return (
-        <div className="px-4 py-6 sm:px-6 lg:px-8 min-h-screen">
-            <div className="max-w-7xl mx-auto space-y-8">
-                {/* Header with Back Button */}
-                <div className="flex items-center justify-between mb-4">
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.back()}
-                        className="p-2 touch:p-3 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                        <span className="ml-2 hidden sm:inline">Back</span>
-                    </Button>
-                    <div className="text-center">
-                        <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                            Choose Your Plan
-                        </h1>
-                        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-2 max-w-3xl mx-auto">
-                            Scale your pig farm management with the right plan for your needs. Start free and upgrade as you grow.
-                        </p>
-                        <div className="flex items-center justify-center mt-4">
-                            <Badge
-                                variant="outline"
-                                className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 text-xs sm:text-sm"
-                            >
-                                Current Plan: {tier.toUpperCase()}
-                            </Badge>
-                        </div>
-                    </div>
-                    <div className="w-8 sm:w-10" /> {/* Spacer for alignment */}
-                </div>
-
+        <PageShell
+            title="Plans & pricing"
+            description="Start with a free trial and upgrade as your farm grows. Pay with M-Pesa."
+            width="xl"
+            actions={
+                <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+                    Current plan: {isTrialActive ? "Trial" : tier.charAt(0).toUpperCase() + tier.slice(1)}
+                </Badge>
+            }
+        >
+            <div className="space-y-8">
                 {/* Pricing Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {plans.map((plan) => {
@@ -237,13 +216,13 @@ function PricingContent() {
                                 <div>
                                     <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">What payment methods do you accept?</h4>
                                     <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        We accept M-Pesa, Stripe (credit/debit cards), and PayPal for your convenience.
+                                        We accept M-Pesa. You confirm the payment on your phone and your plan activates as soon as M-Pesa confirms it.
                                     </p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Is there a free trial?</h4>
                                     <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Our Free plan is available forever with no time limits. Upgrade when you're ready to scale.
+                                        Yes. Every new farm gets a full-access trial. After it ends you keep the Free plan with no time limit and can upgrade whenever you're ready.
                                     </p>
                                 </div>
                                 <div>
@@ -266,7 +245,7 @@ function PricingContent() {
                     onClose={() => setShowPayment(false)}
                 />
             )}
-        </div>
+        </PageShell>
     )
 }
 

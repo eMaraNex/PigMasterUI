@@ -22,13 +22,13 @@ const Sidebar: React.FC<SidebarProps & { handleAddRow: () => void; addRowOpen: b
     const handleMenuClick = (action: string) => {
         switch (action) {
             case "profile":
-                router.push("/profile")
+                router.push("/settings?tab=profile")
                 break
             case "settings":
                 router.push("/settings")
                 break
             case "users":
-                router.push("/users")
+                router.push("/settings?tab=team")
                 break
             case "pricing":
                 router.push("/pricing")

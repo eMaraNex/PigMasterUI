@@ -5,6 +5,7 @@ import { createContext, useContext, useState, useEffect, useRef } from "react"
 import getSymbol from "currency-symbol-map"
 import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
 import { setCurrency as setCurrencyPreference } from "@/lib/redux/preferences/preferencesSlice"
+import { apiRequest } from "@/lib/api/client"
 
 type Currency = string;
 
@@ -33,52 +34,41 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Fetch exchange rates from ExchangeRate-API
+    // Rates come from the PigMaster API, which holds any provider key server-side
+    // and falls back to a free no-key source, so nothing needs configuring here.
     const fetchExchangeRates = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        const apiKey = process.env.NEXT_PUBLIC_API_KEY?.trim()
         const baseCurrency = (process.env.NEXT_PUBLIC_BASE_CURRENCY?.trim() || "USD").toUpperCase()
-        if (!apiKey) {
-          throw new Error("Exchange-rate API key is not configured. Set NEXT_PUBLIC_API_KEY in PigMasterUI/.env.local.")
-        }
-        if (!/^[A-Z]{3}$/.test(baseCurrency)) {
-          throw new Error("NEXT_PUBLIC_BASE_CURRENCY must be a valid three-letter currency code.")
-        }
-
-        const response = await fetch(
-          `https://v6.exchangerate-api.com/v6/${encodeURIComponent(apiKey)}/latest/${baseCurrency}`
-        )
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`)
-        }
-        const data = await response.json()
-        if (data.result === "success" && data.conversion_rates && typeof data.conversion_rates === "object") {
-          setCurrencyRates(data.conversion_rates)
-          const currencies = Object.keys(data.conversion_rates)
-          setSupportedCurrencies(currencies)
-          // Cache rates and currencies
-          localStorage.setItem("currency_rates", JSON.stringify(data.conversion_rates))
+        const response = await apiRequest.get("/currency/rates", { params: { base: baseCurrency } })
+        const rates = response.data?.data?.rates
+        if (!rates || typeof rates !== "object") throw new Error("Exchange rates are unavailable right now.")
+        setCurrencyRates(rates)
+        const currencies = Object.keys(rates).sort()
+        setSupportedCurrencies(currencies)
+        try {
+          localStorage.setItem("currency_rates", JSON.stringify(rates))
           localStorage.setItem("supported_currencies", JSON.stringify(currencies))
           localStorage.setItem("rates_last_updated", Date.now().toString())
-          // Validate saved currency
-          if (initialCurrency && !currencies.includes(initialCurrency)) {
-            const defaultCurrency = (process.env.NEXT_PUBLIC_BASE_CURRENCY || "USD").toUpperCase()
-            dispatch(setCurrencyPreference(defaultCurrency))
-          }
-        } else {
-          throw new Error(data["error-type"] || data.error || "Exchange-rate API returned an invalid response.")
+        } catch {
+          // Storage can be unavailable (private mode); rates still work for this visit.
+        }
+        if (initialCurrency && !currencies.includes(initialCurrency)) {
+          dispatch(setCurrencyPreference(baseCurrency))
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
         console.error("Error fetching exchange rates:", err)
-        // Load cached rates if available
-        const cachedRates = localStorage.getItem("currency_rates")
-        const cachedCurrencies = localStorage.getItem("supported_currencies")
-        if (cachedRates && cachedCurrencies) {
-          setCurrencyRates(JSON.parse(cachedRates))
-          setSupportedCurrencies(JSON.parse(cachedCurrencies))
+        try {
+          const cachedRates = localStorage.getItem("currency_rates")
+          const cachedCurrencies = localStorage.getItem("supported_currencies")
+          if (cachedRates && cachedCurrencies) {
+            setCurrencyRates(JSON.parse(cachedRates))
+            setSupportedCurrencies(JSON.parse(cachedCurrencies))
+          }
+        } catch {
+          // Ignore unreadable cache.
         }
       } finally {
         setIsLoading(false)
@@ -86,17 +76,19 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Check if rates are cached and not older than 24 hours
-    const lastUpdated = localStorage.getItem("rates_last_updated")
-    const ratesCache = localStorage.getItem("currency_rates")
-    const currenciesCache = localStorage.getItem("supported_currencies")
-    const oneDay = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+    let lastUpdated: string | null = null
+    let ratesCache: string | null = null
+    let currenciesCache: string | null = null
+    try {
+      lastUpdated = localStorage.getItem("rates_last_updated")
+      ratesCache = localStorage.getItem("currency_rates")
+      currenciesCache = localStorage.getItem("supported_currencies")
+    } catch {
+      // Storage blocked: always fetch.
+    }
+    const twelveHours = 12 * 60 * 60 * 1000
 
-    if (
-      ratesCache &&
-      currenciesCache &&
-      lastUpdated &&
-      Date.now() - parseInt(lastUpdated) < oneDay
-    ) {
+    if (ratesCache && currenciesCache && lastUpdated && Date.now() - parseInt(lastUpdated) < twelveHours) {
       setCurrencyRates(JSON.parse(ratesCache))
       setSupportedCurrencies(JSON.parse(currenciesCache))
       setIsLoading(false)

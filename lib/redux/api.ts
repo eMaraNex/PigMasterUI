@@ -36,6 +36,19 @@ export type HealthSummary = {
   pigs_treated_30d: number;
 };
 
+export type Reminder = {
+  id: string;
+  date: string;
+  title: string;
+  details: string | null;
+  category: "health" | "breeding" | "farrowing" | "weaning" | "alert" | "feed";
+  severity: "low" | "medium" | "high";
+  status: "overdue" | "due";
+  pig_id: string | null;
+};
+
+export type Reminders = { overdue: number; upcoming: number; items: Reminder[] };
+
 export type SubscriptionData = {
   current_plan?: string;
   plan_name?: string;
@@ -45,6 +58,11 @@ export type SubscriptionData = {
   payment_status?: string;
   expiry_date?: string | null;
   subscription_end?: string | null;
+  trial_end_date?: string | null;
+  trial_ends_at?: string | null;
+  is_farm_owner?: boolean;
+  has_active_subscription?: boolean;
+  is_trial_active?: boolean;
 };
 
 const baseQuery = fetchBaseQuery({
@@ -95,6 +113,11 @@ export const api = createApi({
       query: () => "/alerts/today",
       transformResponse: (response: ApiEnvelope<unknown[]>) => response.data,
       providesTags: (_result, _error, farmId) => [{ type: "Farm", id: `${farmId}-alerts` }],
+    }),
+    getReminders: builder.query<Reminders, void>({
+      query: () => "/alerts/reminders",
+      transformResponse: (response: ApiEnvelope<Reminders>) => response.data,
+      providesTags: ["Health", "Pig"],
     }),
     getFarmCalendar: builder.query<unknown[], string>({
       query: () => "/alerts/list?limit=1000",
@@ -227,6 +250,7 @@ export const {
   useGetPensQuery,
   useGetFarmAlertsQuery,
   useGetFarmCalendarQuery,
+  useGetRemindersQuery,
   useGetSubscriptionQuery,
   useGetHealthSummaryQuery,
   useCreateFarmMutation,

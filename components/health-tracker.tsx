@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import dayjs from "dayjs"
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Plus, Search, Syringe, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +14,9 @@ import { useToast } from "@/lib/toast-provider"
 import { useAppDispatch } from "@/lib/redux/hooks"
 import { api, useGetHealthSummaryQuery } from "@/lib/redux/api"
 import type { HealthTrackerProps } from "@/types"
+import { DateRangePicker, presetRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker"
+import { ExportMenu } from "@/components/shared/export-menu"
+import { usePermissions } from "@/lib/permissions"
 
 type HealthRecord = {
   id: string
@@ -72,6 +75,8 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
   const [view, setView] = useState<View>("due")
   const [dueFilter, setDueFilter] = useState<DueFilter>("all")
   const [typeFilter, setTypeFilter] = useState("")
+  const [historyRange, setHistoryRange] = useState<DateRange>(() => presetRange("last_3_months"))
+  const { can } = usePermissions()
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -89,29 +94,37 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     return () => clearTimeout(timer)
   }, [search])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const filter = useMemo(() => {
     const today = dayjs().format("YYYY-MM-DD")
-    const filter: { field: string; operator: string; value?: unknown }[] = []
-    if (typeFilter) filter.push({ field: "type", operator: "eq", value: typeFilter })
+    const conditions: { field: string; operator: string; value?: unknown }[] = []
+    if (typeFilter) conditions.push({ field: "type", operator: "eq", value: typeFilter })
     if (view === "due") {
-      filter.push({ field: "due_date", operator: "isNotEmpty" })
-      filter.push({ field: "status", operator: "neq", value: "cancelled" })
-      if (dueFilter === "overdue") filter.push({ field: "due_date", operator: "lt", value: today })
+      conditions.push({ field: "due_date", operator: "isNotEmpty" })
+      conditions.push({ field: "status", operator: "neq", value: "cancelled" })
+      if (dueFilter === "overdue") conditions.push({ field: "due_date", operator: "lt", value: today })
       if (dueFilter === "week") {
-        filter.push({ field: "due_date", operator: "gte", value: today })
-        filter.push({ field: "due_date", operator: "lte", value: dayjs().add(7, "day").format("YYYY-MM-DD") })
+        conditions.push({ field: "due_date", operator: "gte", value: today })
+        conditions.push({ field: "due_date", operator: "lte", value: dayjs().add(7, "day").format("YYYY-MM-DD") })
       }
     } else {
-      filter.push({ field: "status", operator: "eq", value: "completed" })
+      conditions.push({ field: "status", operator: "eq", value: "completed" })
+      const { from, to } = rangeToDates(historyRange)
+      if (from) conditions.push({ field: "date", operator: "gte", value: from })
+      if (to) conditions.push({ field: "date", operator: "lte", value: to })
     }
+    return conditions
+  }, [view, dueFilter, typeFilter, historyRange])
+  const sort = [view === "due" ? { field: "due_date", order: "ASC" } : { field: "date", order: "DESC" }]
+
+  const load = useCallback(async () => {
+    setLoading(true)
     try {
       const response = await apiRequest.post("/health-records/list", {
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
         filter,
-        sort: [view === "due" ? { field: "due_date", order: "ASC" } : { field: "date", order: "DESC" }],
+        sort,
       })
       setRecords(response.data.data)
       setTotal(response.data.total)
@@ -120,7 +133,7 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
     } finally {
       setLoading(false)
     }
-  }, [view, dueFilter, typeFilter, debouncedSearch, page])
+  }, [filter, view, debouncedSearch, page])
 
   useEffect(() => { load() }, [load])
 
@@ -237,9 +250,11 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                 </button>
               ))}
             </div>
-            <Button onClick={() => setAddOpen(true)} className="bg-gradient-to-r from-green-500 to-blue-500 text-white">
-              <Plus className="mr-2 h-4 w-4" />Record health work
-            </Button>
+            {can("health_records", "create") && (
+              <Button onClick={() => setAddOpen(true)} className="bg-gradient-to-r from-green-500 to-blue-500 text-white">
+                <Plus className="mr-2 h-4 w-4" />Record health work
+              </Button>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <div className="relative min-w-48 flex-1">
@@ -258,6 +273,17 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                 <option value="overdue">Overdue</option>
                 <option value="week">Due this week</option>
               </select>
+            )}
+            {view === "history" && (
+              <DateRangePicker value={historyRange} onChange={next => { setHistoryRange(next); setPage(1) }} allowAll />
+            )}
+            {can("health_records", "export") && (
+              <ExportMenu
+                path="/health-records/export"
+                filename={view === "due" ? "health-due" : "health-history"}
+                params={{ filter, sort, search: debouncedSearch || undefined }}
+                className="h-9"
+              />
             )}
           </div>
         </CardHeader>
@@ -307,14 +333,16 @@ export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
                       </td>
                       <td className="hidden px-3 py-2.5 md:table-cell">{record.veterinarian || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right">
-                        {view === "due" && (
+                        {view === "due" && can("health_records", "update") && (
                           <Button size="sm" variant="outline" className="mr-1" onClick={() => setCompleting(record)}>
                             <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Given
                           </Button>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => remove(record)} aria-label="Delete record">
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
+                        {can("health_records", "delete") && (
+                          <Button size="sm" variant="ghost" onClick={() => remove(record)} aria-label="Delete record">
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   )
