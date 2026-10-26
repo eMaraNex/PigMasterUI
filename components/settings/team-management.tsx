@@ -109,6 +109,17 @@ export default function TeamManagement() {
     }
   };
 
+  const resend = async (member: Member) => {
+    try {
+      const response = await apiRequest.post(`/team/resend-invite/${member.id}`);
+      const result = response.data.data;
+      if (result.email_sent) showSuccess("Invite sent again", `${member.email} has a new link, valid for ${result.expires_in_hours} hours.`);
+      else showError("Email not sent", "A new link was created but the email failed. Ask them to use \"Forgot password\" on the login page.");
+    } catch (error) {
+      showError("Could not resend invite", errorText(error));
+    }
+  };
+
   const remove = async () => {
     if (!removing) return;
     try {
@@ -169,12 +180,17 @@ export default function TeamManagement() {
                       {roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
                     </select>
                   )}
-                  {!member.is_owner && (canEdit || canRemove) && (
+                  {!member.is_owner && (canEdit || canRemove || (canInvite && !member.password_set)) && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label={`Actions for ${member.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {canInvite && !member.password_set && (
+                          <DropdownMenuItem onClick={() => resend(member)}>
+                            <Mail className="mr-2 h-4 w-4" />Resend invite
+                          </DropdownMenuItem>
+                        )}
                         {canEdit && (
                           <DropdownMenuItem onClick={() => update(member, { status: member.status === "disabled" ? "active" : "disabled" }, member.status === "disabled" ? `${member.name} can sign in to this farm again` : `${member.name} is paused`)}>
                             {member.status === "disabled" ? "Re-enable access" : "Pause access"}

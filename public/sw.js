@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pig-master-v3';
+// Bump the version whenever caching rules change: activation deletes every other cache.
+const CACHE_NAME = 'pig-master-v4';
 const OFFLINE_URL = '/offline.html';
 
 const urlsToCache = [
-    '/',
     '/offline.html',
     '/manifest.json',
     '/icons/icon-48x48.png',
@@ -16,25 +16,31 @@ const urlsToCache = [
     '/icons/icon-512x512.png',
 ];
 
-// Enhanced cache helper with quota management
+// Only truly static files are cached: icons, images, fonts and the manifest.
+// App pages, Next.js page data (RSC / ?_rsc=) and JavaScript must always come from the
+// server, otherwise the browser keeps running an old version of the app after an update
+// (for example settings links losing their ?tab= and always opening the default tab).
 function shouldCache(request) {
     if (request.method !== 'GET') return false;
     if (!request.url.startsWith('http')) return false;
 
     const url = new URL(request.url);
-    const pathname = url.pathname;
+    if (url.origin !== self.location.origin) return false;
+    if (url.searchParams.has('_rsc') || request.headers.get('RSC') || request.headers.get('Next-Router-State-Tree')) return false;
 
-    // Skip API calls, development assets, and dynamic content
-    const skipPatterns = [
-        '/api/',
-        '/_next/static/chunks/',
-        'sockjs-node',
-        'hot-update',
-        '.map',
-        '/screenshots/' // Skip screenshots to save space
-    ];
+    const { pathname } = url;
+    if (pathname.startsWith('/api/') || pathname.startsWith('/_next/')) return false;
+    return (
+        pathname.startsWith('/icons/') ||
+        pathname === '/manifest.json' ||
+        pathname === OFFLINE_URL ||
+        ['image', 'font'].includes(request.destination)
+    );
+}
 
-    return !skipPatterns.some(pattern => pathname.includes(pattern));
+// Full page loads: always network; the cached offline page is only used when offline.
+function isPageLoad(request) {
+    return request.mode === 'navigate' && request.method === 'GET' && new URL(request.url).origin === self.location.origin;
 }
 
 // Improved cache management with quota awareness
@@ -99,7 +105,6 @@ self.addEventListener('install', (event) => {
 
                 // Cache essential files first
                 const essentialFiles = [
-                    '/',
                     '/offline.html',
                     '/manifest.json',
                     '/icons/icon-192x192.png',
@@ -157,29 +162,13 @@ self.addEventListener('activate', (event) => {
 
 // Enhanced fetch event with better error handling
 self.addEventListener('fetch', (event) => {
-    if (!shouldCache(event.request)) {
-        return;
-    }
-
-    if (event.request.destination === 'document') {
+    if (isPageLoad(event.request)) {
         event.respondWith(
             (async () => {
                 try {
-                    // Network-first strategy for documents
-                    const networkResponse = await fetch(event.request);
-
-                    if (networkResponse.status === 200) {
-                        safeCachePut(CACHE_NAME, event.request, networkResponse.clone());
-                    }
-
-                    return networkResponse;
+                    // Pages are never cached, so every load gets the current app.
+                    return await fetch(event.request);
                 } catch (networkError) {
-                    // Fallback to cache
-                    const cachedResponse = await safeCacheMatch(event.request);
-                    if (cachedResponse) {
-                        return cachedResponse;
-                    }
-
                     // Return offline page
                     const offlineResponse = await safeCacheMatch(OFFLINE_URL);
                     if (offlineResponse) {
@@ -215,8 +204,8 @@ self.addEventListener('fetch', (event) => {
                 }
             })()
         );
-    } else {
-        // Cache-first strategy for assets
+    } else if (shouldCache(event.request)) {
+        // Cache-first strategy for static assets (icons, images, fonts, manifest)
         event.respondWith(
             (async () => {
                 const cachedResponse = await safeCacheMatch(event.request);

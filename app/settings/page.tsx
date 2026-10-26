@@ -1,7 +1,7 @@
 "use client"
 
-import { Suspense, useMemo } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Bell, Building2, CreditCard, Loader2, ShieldCheck, SlidersHorizontal, UserRound, Users } from "lucide-react"
 import ProtectedRoute from "@/components/auth/protected-route"
 import PageShell from "@/components/shared/page-shell"
@@ -27,7 +27,6 @@ const SECTIONS = [
 type SectionKey = (typeof SECTIONS)[number]["key"]
 
 function SettingsContent() {
-  const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
   const { can, isOwner } = usePermissions()
@@ -37,9 +36,17 @@ function SettingsContent() {
     () => SECTIONS.filter(section => (section.key !== "team" || can("team", "read")) && (section.key !== "billing" || isOwner)),
     [can, isOwner],
   )
-  const requested = params.get("tab") as SectionKey | null
-  const active: SectionKey = sections.some(section => section.key === requested) ? requested! : "farm"
-  const select = (key: SectionKey) => router.replace(`${pathname}?tab=${key}`, { scroll: false })
+  // The open tab is local state; the URL (?tab=) is only kept in sync so links and refresh work.
+  // Switching tabs no longer navigates, which re-rendered the whole page on every click.
+  const [tab, setTab] = useState<SectionKey | null>(() => params.get("tab") as SectionKey | null)
+  useEffect(() => {
+    setTab(params.get("tab") as SectionKey | null)
+  }, [params])
+  const active: SectionKey = sections.some(section => section.key === tab) ? tab! : "farm"
+  const select = (key: SectionKey) => {
+    setTab(key)
+    window.history.replaceState(window.history.state, "", `${pathname}?tab=${key}`)
+  }
 
   return (
     <PageShell title="Settings" description="Your account, farm, team, plan and notifications in one place." width="xl">
