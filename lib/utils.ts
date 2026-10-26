@@ -59,10 +59,16 @@ export function isBreedingReady(pig: any): boolean {
     return ageInMonths >= 6;
   }
 }
-const normalizeUrl = (url: string | undefined) => (url ?? "").replace(/\/$/, "");
+// Accepts the API origin with or without a trailing "/" or "/api/v1".
+const normalizeUrl = (url: string | undefined) => (url ?? "").trim().replace(/\/+$/, "").replace(/\/api\/v1$/, "");
 
+/**
+ * API origin. NEXT_PUBLIC_API_URL is baked in at build time: set it in .env.production
+ * (e.g. https://pigmasterapi.emaranex.com) before `npm run build`. Without it, production
+ * builds call the API on the same domain and only `next dev` falls back to localhost:5000.
+ */
 export const baseUrl =
-  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL?.trim() ||
   (process.env.NODE_ENV === "production" ? "" : "http://localhost:5000");
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
