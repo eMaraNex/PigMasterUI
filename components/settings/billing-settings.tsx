@@ -21,6 +21,7 @@ type Payment = {
   failure_reason: string | null;
   created_at: string;
   completed_at: string | null;
+  metadata?: { plan_period?: string } | null;
 };
 
 const STATUS: Record<Payment["status"], { label: string; icon: typeof CheckCircle2; tone: string }> = {
@@ -31,6 +32,14 @@ const STATUS: Record<Payment["status"], { label: string; icon: typeof CheckCircl
 };
 
 const PAGE_SIZE = 10;
+
+/** 254712345678 -> 0712 •••678: enough for the owner to recognise the number, not to copy it. */
+const maskPhone = (phone: string | null) => {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return "—";
+  const local = `0${digits.slice(-9)}`;
+  return `${local.slice(0, 4)} •••${local.slice(-3)}`;
+};
 
 /** Current plan, renewal date and M-Pesa payment history for the farm owner. */
 export default function BillingSettings() {
@@ -105,7 +114,7 @@ export default function BillingSettings() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase text-gray-500">
-                  <tr><th className="pb-2">Date</th><th className="pb-2">Plan</th><th className="pb-2">Amount</th><th className="pb-2">Status</th><th className="hidden pb-2 sm:table-cell">M-Pesa receipt</th></tr>
+                  <tr><th className="pb-2">Date</th><th className="pb-2">Plan</th><th className="pb-2">Amount</th><th className="pb-2">Status</th><th className="pb-2">M-Pesa receipt</th><th className="hidden pb-2 md:table-cell">Paid from</th></tr>
                 </thead>
                 <tbody>
                   {payments.map(payment => {
@@ -114,14 +123,15 @@ export default function BillingSettings() {
                     return (
                       <tr key={payment.id} className="border-t dark:border-gray-700">
                         <td className="whitespace-nowrap py-2.5">{dayjs(payment.created_at).format("D MMM YYYY")}</td>
-                        <td className="py-2.5 capitalize">{payment.plan}</td>
+                        <td className="py-2.5 capitalize">{payment.plan}<span className="block text-xs text-gray-500">{payment.metadata?.plan_period === "yearly" ? "Yearly" : "Monthly"}</span></td>
                         <td className="whitespace-nowrap py-2.5">{payment.currency} {Number(payment.amount).toLocaleString()}</td>
                         <td className="py-2.5">
                           <span className={`inline-flex items-center gap-1 ${status.tone}`} title={payment.failure_reason ?? undefined}>
                             <Icon className="h-4 w-4" />{status.label}
                           </span>
                         </td>
-                        <td className="hidden py-2.5 font-mono text-xs sm:table-cell">{payment.mpesa_receipt_number ?? "—"}</td>
+                        <td className="py-2.5 font-mono text-xs">{payment.mpesa_receipt_number ?? "—"}</td>
+                        <td className="hidden py-2.5 text-xs text-gray-500 md:table-cell">{maskPhone(payment.phone_number)}</td>
                       </tr>
                     );
                   })}

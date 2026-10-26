@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { apiRequest } from "@/lib/api/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +10,6 @@ import PageShell from "@/components/shared/page-shell"
 import Link from "next/link"
 import FaqList from "@/components/faq/faq-list"
 import { PRICING_FAQS } from "@/lib/faqs"
-import PaymentModal from "@/components/subscription/payment-modal"
 import ProtectedRoute from "@/components/auth/protected-route"
 import { useSubscription } from "@/lib/subscription-context"
 import TillPaymentModal from "@/components/subscription/till-payment-modal";
@@ -77,10 +77,71 @@ const plans = [
     },
 ]
 
+type Period = "monthly" | "yearly"
+type Quote = { amount: number; currency: string; durationMonths: number }
+// Matches the server: yearly = 12 months with 16% off (the server is the source of truth for prices).
+const YEARLY_DISCOUNT_PCT = 16
+
+const formatKes = (amount: number) => `KSh ${Math.round(amount).toLocaleString("en-KE")}`
+
+/** Price block: monthly price, or the yearly total with its monthly equivalent and saving. */
+function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; period: Period; quotes: Record<string, Quote> }) {
+    if (plan.price === 0) {
+        return (
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">Free</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">forever</span>
+            </div>
+        )
+    }
+    const monthly = quotes[`${plan.id}:monthly`]
+    const yearly = quotes[`${plan.id}:yearly`]
+    if (!monthly || !yearly) return <div className="mx-auto h-10 w-32 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+    if (period === "monthly") {
+        return (
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(monthly.amount)}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">/ month</span>
+            </div>
+        )
+    }
+    const saving = monthly.amount * 12 - yearly.amount
+    return (
+        <div className="space-y-1">
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(yearly.amount)}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">/ year</span>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+                <span className="mr-1 text-gray-400 line-through">{formatKes(monthly.amount * 12)}</span>
+                ≈ {formatKes(yearly.amount / 12)} / month
+            </p>
+            {saving > 0 && (
+                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-200">
+                    You save {formatKes(saving)}
+                </Badge>
+            )}
+        </div>
+    )
+}
+
 function PricingContent() {
     const { tier, upgradeTo, isTrialActive } = useSubscription()
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
     const [showPayment, setShowPayment] = useState(false)
+    const [period, setPeriod] = useState<Period>("monthly")
+    const [quotes, setQuotes] = useState<Record<string, Quote>>({})
+
+    // Real KES prices for both billing periods, straight from the server.
+    useEffect(() => {
+        const paid = plans.filter(plan => plan.price > 0)
+        Promise.all(paid.flatMap(plan => (["monthly", "yearly"] as Period[]).map(async billing => {
+            const response = await apiRequest.get("/payments/quote", { params: { plan: plan.id, period: billing } })
+            return [`${plan.id}:${billing}`, response.data.data as Quote] as const
+        })))
+            .then(entries => setQuotes(Object.fromEntries(entries)))
+            .catch(() => setQuotes({}))
+    }, [])
 
     const handleSelectPlan = (planId: string) => {
         if (planId === "free") {
@@ -110,6 +171,32 @@ function PricingContent() {
             }
         >
             <div className="space-y-8">
+                {/* Billing period */}
+                <div className="flex flex-col items-center gap-2">
+                    <div role="radiogroup" aria-label="Billing period" className="inline-flex rounded-full border bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        {(["monthly", "yearly"] as Period[]).map(option => (
+                            <button
+                                key={option}
+                                type="button"
+                                role="radio"
+                                aria-checked={period === option}
+                                onClick={() => setPeriod(option)}
+                                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition ${period === option ? "bg-gradient-to-r from-green-600 to-blue-600 text-white shadow" : "text-gray-600 hover:text-gray-900 dark:text-gray-300"}`}
+                            >
+                                {option === "monthly" ? "Pay monthly" : "Pay yearly"}
+                                {option === "yearly" && (
+                                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${period === "yearly" ? "bg-white/25 text-white" : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"}`}>
+                                        Save {YEARLY_DISCOUNT_PCT}%
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                        {period === "yearly" ? "One M-Pesa payment covers 12 months. Nothing renews automatically." : "Pay each month with M-Pesa. Nothing renews automatically."}
+                    </p>
+                </div>
+
                 {/* Pricing Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {plans.map((plan) => {
@@ -146,10 +233,7 @@ function PricingContent() {
                                     </div>
                                     <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{plan.name}</CardTitle>
                                     <div className="space-y-2">
-                                        <div className="flex items-baseline justify-center space-x-1">
-                                            <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100">${plan.price}</span>
-                                            <span className="text-sm sm:text-base text-gray-600 dark:text-gray-300">/{plan.period}</span>
-                                        </div>
+                                        <PlanPrice plan={plan} period={period} quotes={quotes} />
                                         <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">{plan.description}</p>
                                     </div>
                                 </CardHeader>
@@ -217,7 +301,7 @@ function PricingContent() {
             {/* Payment Modal */}
             {showPayment && selectedPlan && (
                 <TillPaymentModal
-                    plan={plans.find((p) => p.id === selectedPlan)!}
+                    plan={{ ...plans.find((p) => p.id === selectedPlan)!, period }}
                     onSuccess={() => handlePaymentSuccess(selectedPlan)}
                     onClose={() => setShowPayment(false)}
                 />

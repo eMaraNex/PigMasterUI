@@ -48,11 +48,20 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     // Compute amount + dates
     const startDate = new Date()
     const endDate = new Date(startDate)
-    if (plan.period === "yearly") {
+    const isYearly = plan.period === "yearly"
+    if (isYearly) {
         endDate.setFullYear(endDate.getFullYear() + 1)
     } else {
         endDate.setMonth(endDate.getMonth() + 1)
     }
+
+    // Exact amount M-Pesa will charge, shown before the prompt is sent.
+    const [quote, setQuote] = useState<{ amount: number } | null>(null)
+    useEffect(() => {
+        axios.get(`${utils.apiUrl}/payments/quote`, { params: { plan: plan.id, period: isYearly ? "yearly" : "monthly" } })
+            .then(res => setQuote(res.data?.data ?? null))
+            .catch(() => setQuote(null))
+    }, [plan.id, isYearly])
 
     const stopPolling = () => {
         if (pollRef.current) clearTimeout(pollRef.current)
@@ -160,9 +169,12 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 <DialogHeader>
                     <DialogTitle className="text-center">Pay with M-Pesa</DialogTitle>
                     <div className="text-center space-y-1">
-                        <p className="text-lg font-semibold">{plan.name} Plan</p>
+                        <p className="text-lg font-semibold">{plan.name} plan · {isYearly ? "yearly" : "monthly"}</p>
                         <p className="text-2xl font-bold text-blue-600">
-                            ${plan.price.toFixed(2)} USD /{plan.period}
+                            {quote ? `KSh ${quote.amount.toLocaleString("en-KE")}` : "…"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            {isYearly ? `Covers 12 months, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : `Covers 1 month, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
                         </p>
                     </div>
                 </DialogHeader>

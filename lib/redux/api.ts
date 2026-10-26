@@ -48,7 +48,7 @@ export type Reminder = {
   date: string;
   title: string;
   details: string | null;
-  category: "health" | "breeding" | "farrowing" | "weaning" | "alert" | "feed";
+  category: "health" | "breeding" | "farrowing" | "weaning" | "alert" | "feed" | "billing";
   severity: "low" | "medium" | "high";
   status: "overdue" | "due";
   pig_id: string | null;

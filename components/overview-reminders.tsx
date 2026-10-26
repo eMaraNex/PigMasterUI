@@ -1,7 +1,8 @@
 "use client";
 
 import dayjs from "dayjs";
-import { AlertTriangle, Baby, CalendarDays, ChevronRight, Heart, Loader2, Package, Syringe } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Baby, CalendarDays, ChevronRight, CreditCard, Heart, Loader2, Package, Syringe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ const CATEGORY: Record<Reminder["category"], { icon: typeof Syringe; tone: strin
   weaning: { icon: Baby, tone: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", tab: "breeding" },
   feed: { icon: Package, tone: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300", tab: "feeding" },
   alert: { icon: AlertTriangle, tone: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300", tab: "calender" },
+  // Plan / trial ending: opens billing instead of a dashboard tab.
+  billing: { icon: CreditCard, tone: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300", tab: "billing" },
 };
 
 const when = (date: string) => {
@@ -30,6 +33,8 @@ const when = (date: string) => {
  */
 export default function OverviewReminders({ onOpenTab }: { onOpenTab: (tab: string) => void }) {
   const { data, isLoading, isError, refetch } = useGetRemindersQuery(undefined, { refetchOnMountOrArgChange: 60 });
+  const router = useRouter();
+  const open = (tab: string) => (tab === "billing" ? router.push("/settings?tab=billing") : onOpenTab(tab));
 
   return (
     <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20">
@@ -65,7 +70,7 @@ export default function OverviewReminders({ onOpenTab }: { onOpenTab: (tab: stri
               <li key={item.id}>
                 <button
                   type="button"
-                  onClick={() => onOpenTab(meta.tab)}
+                  onClick={() => open(meta.tab)}
                   className="flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition hover:bg-gray-50 dark:hover:bg-gray-700/40"
                 >
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${meta.tone}`}>
