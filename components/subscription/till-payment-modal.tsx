@@ -10,8 +10,13 @@ import { Loader2, Check, AlertCircle, Smartphone } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as utils from "@/lib/utils"
 
-const POLL_INTERVAL_MS = 4000
-const POLL_TIMEOUT_MS = 120_000 // 2 minutes
+// Customers may first see a Fuliza offer and then the PIN screen, which can take a few
+// minutes. The server never calls a payment failed before ~3 minutes unless the customer
+// cancels, so the modal waits a little longer and then keeps checking quietly.
+const POLL_INTERVAL_MS = 3000
+const ACTIVE_WAIT_MS = 4 * 60_000
+const BACKGROUND_POLL_MS = 15_000
+const BACKGROUND_WAIT_MS = 10 * 60_000
 
 interface TillPaymentModalProps {
     plan: {
@@ -24,7 +29,7 @@ interface TillPaymentModalProps {
     onClose: () => void
 }
 
-type Step = "form" | "waiting" | "success" | "failed"
+type Step = "form" | "waiting" | "processing" | "success" | "failed"
 
 export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPaymentModalProps) {
     const [step, setStep] = useState<Step>("form")
@@ -35,7 +40,8 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     const { toast } = useToast()
 
     const pollRef = useRef<NodeJS.Timeout | null>(null)
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const startedAt = useRef(0)
+    const [elapsed, setElapsed] = useState(0)
 
     const isPhoneValid = /^\+2547\d{8}$/.test(phoneNumber) || /^\+2541\d{8}$/.test(phoneNumber)
 
@@ -49,59 +55,50 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     }
 
     const stopPolling = () => {
-        if (pollRef.current) clearInterval(pollRef.current)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        if (pollRef.current) clearTimeout(pollRef.current)
+        pollRef.current = null
     }
 
     useEffect(() => () => stopPolling(), [])
 
+    const finishSuccess = () => {
+        stopPolling()
+        setStep("success")
+        setTimeout(() => {
+            window.location.reload()
+            onSuccess(plan.id)
+        }, 1500)
+    }
+
+    /**
+     * Polls the payment until M-Pesa gives a definitive answer. Only the server decides
+     * "failed"; running out of time here never does, because the customer may still be
+     * finishing on the phone (Fuliza, PIN) and a late confirmation still activates the plan.
+     */
     const startPolling = (id: string) => {
-        pollRef.current = setInterval(async () => {
+        startedAt.current = Date.now()
+        const tick = async () => {
+            const waited = Date.now() - startedAt.current
+            setElapsed(waited)
             try {
                 const res = await axios.get(`${utils.apiUrl}/payments/${id}`)
                 const payment = res.data?.data
-
-                if (payment?.status === "success") {
+                if (payment?.status === "success" || payment?.mpesa_receipt_number) return finishSuccess()
+                if (payment?.status === "failed") {
                     stopPolling()
-                    setStep("success")
-                    setTimeout(() => {
-                        window.location.reload();
-                        onSuccess(plan.id);
-                    }, 1500)
-                } else if (payment?.status === "failed") {
-                    // Only show failed if there's NO receipt — if there's a receipt,
-                    // money was taken but activation failed, treat as success
-                    if (payment?.metadata?.mpesa_receipt) {
-                        stopPolling()
-                        setStep("success")
-                        setTimeout(() => {
-                            window.location.reload();
-                            onSuccess(plan.id);
-                        }, 1500)
-                    } else {
-                        stopPolling()
-                        setStatusMessage(
-                            payment?.metadata?.callback_error || "Payment was declined or cancelled."
-                        )
-                        setStep("failed")
-                    }
+                    setStatusMessage(payment?.failure_reason || "M-Pesa did not complete the payment.")
+                    setStep("failed")
+                    return
                 }
             } catch (err) {
+                // Network blips: keep checking.
                 console.warn("Poll error:", err)
             }
-        }, POLL_INTERVAL_MS)
-
-        timeoutRef.current = setTimeout(() => {
-            stopPolling()
-            // Check the step via ref to avoid stale closure
-            setStep((current) => {
-                if (current === "waiting") {
-                    setStatusMessage("Payment timed out. Please try again.")
-                    return "failed"
-                }
-                return current
-            })
-        }, POLL_TIMEOUT_MS)
+            if (waited > ACTIVE_WAIT_MS + BACKGROUND_WAIT_MS) return stopPolling()
+            if (waited > ACTIVE_WAIT_MS) setStep(current => (current === "waiting" ? "processing" : current))
+            pollRef.current = setTimeout(tick, waited > ACTIVE_WAIT_MS ? BACKGROUND_POLL_MS : POLL_INTERVAL_MS)
+        }
+        pollRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
 
     const handleSubmit = async () => {
@@ -217,12 +214,32 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 {step === "waiting" && (
                     <div className="text-center space-y-4 py-6">
                         <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
-                        <p className="font-semibold">Waiting for payment…</p>
+                        <p className="font-semibold">Waiting for M-Pesa…</p>
                         <p className="text-sm text-gray-500">
                             Check your phone for the M-Pesa prompt and enter your PIN to confirm.
                         </p>
+                        {elapsed > 20_000 && (
+                            <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+                                If M-Pesa offers Fuliza, accept it and then enter your PIN. Take your time; we keep waiting for M-Pesa&apos;s answer.
+                            </p>
+                        )}
                         <Button variant="outline" className="w-full" onClick={handleClose}>
                             Cancel
+                        </Button>
+                    </div>
+                )}
+
+                {/* ── STILL PROCESSING ── */}
+                {step === "processing" && (
+                    <div className="text-center space-y-4 py-6">
+                        <Loader2 className="h-10 w-10 animate-spin text-amber-500 mx-auto" />
+                        <p className="font-semibold">Still waiting for M-Pesa to confirm</p>
+                        <p className="text-sm text-gray-500">
+                            If you completed the payment on your phone, your plan activates automatically as soon as M-Pesa confirms it.
+                            You can close this window; please don&apos;t pay again.
+                        </p>
+                        <Button variant="outline" className="w-full" onClick={handleClose}>
+                            Close
                         </Button>
                     </div>
                 )}
@@ -244,8 +261,11 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                         <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
                             <AlertCircle className="h-6 w-6 text-red-600" />
                         </div>
-                        <p className="font-semibold">Payment failed</p>
+                        <p className="font-semibold">Payment not completed</p>
                         <p className="text-sm text-gray-500">{statusMessage}</p>
+                        <p className="text-xs text-gray-500">
+                            If M-Pesa did take the money, your plan still activates automatically once M-Pesa confirms it. Check Settings → Billing before paying again.
+                        </p>
                         <div className="flex gap-2">
                             <Button variant="outline" className="flex-1" onClick={handleClose}>
                                 Close
