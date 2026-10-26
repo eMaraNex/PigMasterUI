@@ -36,9 +36,9 @@ const EmailVerificationBanner: React.FC = () => {
 
     return (
         <>
-            <div className="bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl shadow-md mb-6 flex items-center justify-between animate-fade-in">
-                <div className="flex items-center space-x-3">
-                    <Mail className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            <div className="bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl shadow-md mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-fade-in">
+                <div className="flex items-start gap-3 sm:items-center">
+                    <Mail className="h-6 w-6 shrink-0 text-amber-600 dark:text-amber-400" />
                     <div>
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                             Email verification required
@@ -48,7 +48,7 @@ const EmailVerificationBanner: React.FC = () => {
                         </p>
                     </div>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex gap-2 sm:shrink-0 [&>button]:flex-1 sm:[&>button]:flex-none">
                     <Button
                         variant="outline"
                         size="sm"

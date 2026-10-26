@@ -1,586 +1,518 @@
 "use client"
 
+import { useCallback, useEffect, useMemo, useState } from "react"
+import dayjs from "dayjs"
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Plus, Search, Syringe, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Pill, AlertTriangle, Calendar, Plus } from "lucide-react"
-import { useState, useEffect } from "react"
-import axios from "axios"
-import { useAuth } from "@/lib/auth-context"
-import * as utils from "@/lib/utils"
-import { useToast } from "@/lib/toast-provider"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { HealthTrackerProps, Pig } from "@/types"
-import { penNamesConversion } from "@/lib/utils"
+import { apiRequest } from "@/lib/api/client"
+import { useToast } from "@/lib/toast-provider"
+import { useAppDispatch } from "@/lib/redux/hooks"
+import { api, useGetHealthSummaryQuery } from "@/lib/redux/api"
+import type { HealthTrackerProps } from "@/types"
+import { DateRangePicker, presetRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker"
+import { ExportMenu } from "@/components/shared/export-menu"
+import { usePermissions } from "@/lib/permissions"
+
+type HealthRecord = {
+  id: string
+  pig_id: string
+  pig_name: string | null
+  type: string
+  description: string
+  date: string
+  next_due: string | null
+  due_date: string | null
+  status: string
+  veterinarian: string | null
+  notes: string | null
+}
+
+type View = "due" | "history"
+type DueFilter = "all" | "overdue" | "week"
+
+const TYPES = ["vaccination", "treatment", "medication", "checkup", "surgery", "other"]
+const PAGE_SIZE = 20
+
+/** Common treatments on Kenyan farms; the interval pre-fills the next due date. Confirm doses with your vet. */
+const PRESETS: { label: string; type: string; description: string; repeatDays?: number }[] = [
+  { label: "Iron injection (piglets, day 3)", type: "medication", description: "Iron dextran injection" },
+  { label: "Deworming", type: "medication", description: "Deworming", repeatDays: 90 },
+  { label: "Erysipelas vaccine", type: "vaccination", description: "Erysipelas vaccine", repeatDays: 180 },
+  { label: "Mange / lice treatment", type: "treatment", description: "Mange and lice treatment", repeatDays: 90 },
+  { label: "Vitamin / mineral injection", type: "medication", description: "Vitamin and mineral injection" },
+  { label: "Vet check-up", type: "checkup", description: "Routine vet check-up", repeatDays: 30 },
+]
+
+const emptyForm = {
+  scope: "pigs" as "pigs" | "pen" | "all",
+  pig_id: "",
+  pen_id: "",
+  type: "vaccination",
+  description: "",
+  date: dayjs().format("YYYY-MM-DD"),
+  next_due: "",
+  veterinarian: "",
+  notes: "",
+}
+
+const dueLabel = (record: HealthRecord) => {
+  if (!record.due_date) return null
+  const days = dayjs(record.due_date).startOf("day").diff(dayjs().startOf("day"), "day")
+  if (days < 0) return { text: `Overdue ${-days}d`, tone: "destructive" as const }
+  if (days === 0) return { text: "Due today", tone: "default" as const }
+  return { text: `In ${days}d`, tone: "secondary" as const }
+}
 
 export default function HealthTracker({ pigs, pens }: HealthTrackerProps) {
-  const { user } = useAuth()
+  const dispatch = useAppDispatch()
   const { showSuccess, showError } = useToast()
+  const { data: summary, refetch: refetchSummary } = useGetHealthSummaryQuery()
+  const [view, setView] = useState<View>("due")
+  const [dueFilter, setDueFilter] = useState<DueFilter>("all")
+  const [typeFilter, setTypeFilter] = useState("")
+  const [historyRange, setHistoryRange] = useState<DateRange>(() => presetRange("last_3_months"))
+  const { can } = usePermissions()
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [records, setRecords] = useState<HealthRecord[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
-  const [viewRecordsOpen, setViewRecordsOpen] = useState(false)
-  const [selectedPig, setSelectedPig] = useState<Pig | null>(null)
-  const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
-  const [pigRecords, setPigRecords] = useState<any[]>([])
-  const [loadingRecords, setLoadingRecords] = useState(false)
-
+  const [form, setForm] = useState(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState<HealthRecord | null>(null)
+  const [nextDose, setNextDose] = useState("")
 
   useEffect(() => {
-    setLocalPigs(pigs || [])
-  }, [pigs])
-  const [form, setForm] = useState({
-    pig_id: pigs?.[0]?.pig_id || "",
-    type: 'checkup',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    next_due: '',
-    status: 'completed',
-    veterinarian: '',
-    notes: ''
-  })
-  const getHealthStatus = (pig: Pig) => {
-    const now = new Date()
-    const healthRecords = pig?.healthRecords || []
+    const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1) }, 350)
+    return () => clearTimeout(timer)
+  }, [search])
 
-    const overdueMedications = healthRecords.filter((record) => {
-      if (record.nextDue) {
-        return new Date(record.nextDue) < now && record.status !== "completed"
+  const filter = useMemo(() => {
+    const today = dayjs().format("YYYY-MM-DD")
+    const conditions: { field: string; operator: string; value?: unknown }[] = []
+    if (typeFilter) conditions.push({ field: "type", operator: "eq", value: typeFilter })
+    if (view === "due") {
+      conditions.push({ field: "due_date", operator: "isNotEmpty" })
+      conditions.push({ field: "status", operator: "neq", value: "cancelled" })
+      if (dueFilter === "overdue") conditions.push({ field: "due_date", operator: "lt", value: today })
+      if (dueFilter === "week") {
+        conditions.push({ field: "due_date", operator: "gte", value: today })
+        conditions.push({ field: "due_date", operator: "lte", value: dayjs().add(7, "day").format("YYYY-MM-DD") })
       }
-      return false
-    })
+    } else {
+      conditions.push({ field: "status", operator: "eq", value: "completed" })
+      const { from, to } = rangeToDates(historyRange)
+      if (from) conditions.push({ field: "date", operator: "gte", value: from })
+      if (to) conditions.push({ field: "date", operator: "lte", value: to })
+    }
+    return conditions
+  }, [view, dueFilter, typeFilter, historyRange])
+  const sort = [view === "due" ? { field: "due_date", order: "ASC" } : { field: "date", order: "DESC" }]
 
-    if (overdueMedications.length > 0) return "overdue"
-
-    const upcomingMedications = healthRecords.filter((record) => {
-      if (record.nextDue) {
-        const dueDate = new Date(record.nextDue)
-        const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-        return dueDate <= threeDaysFromNow && dueDate >= now && record?.status !== "completed"
-      }
-      return false
-    })
-
-    if (upcomingMedications.length > 0) return "upcoming"
-    return "good"
-  }
-
-  const overduePigs = localPigs?.filter((r) => getHealthStatus(r) === "overdue") || []
-  const upcomingPigs = localPigs?.filter((r) => getHealthStatus(r) === "upcoming") || []
-  const healthyPigs = localPigs?.filter((r) => getHealthStatus(r) === "good") || []
-
- 
-  const fetchPigHealthRecords = async (pigId: string) => {
-    setLoadingRecords(true)
+  const load = useCallback(async () => {
+    setLoading(true)
     try {
-      const response = await axios.get(`${utils.apiUrl}/health/pig/${pigId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` }
+      const response = await apiRequest.post("/health-records/list", {
+        page,
+        limit: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        filter,
+        sort,
       })
-      const records = response?.data?.data ?? response?.data
-      setPigRecords(Array.isArray(records) ? records : [])
+      setRecords(response.data.data)
+      setTotal(response.data.total)
     } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message || 'Failed to fetch records')
-      setPigRecords([])
+      showError("Error", err?.response?.data?.message || "Could not load health records")
     } finally {
-      setLoadingRecords(false)
+      setLoading(false)
+    }
+  }, [filter, view, debouncedSearch, page])
+
+  useEffect(() => { load() }, [load])
+
+  const refresh = () => {
+    load()
+    refetchSummary()
+    dispatch(api.util.invalidateTags(["Health"]))
+  }
+
+  const openDue = (filter: DueFilter) => { setView("due"); setDueFilter(filter); setPage(1) }
+
+  const applyPreset = (preset: (typeof PRESETS)[number]) =>
+    setForm(prev => ({
+      ...prev,
+      type: preset.type,
+      description: preset.description,
+      next_due: preset.repeatDays ? dayjs(prev.date).add(preset.repeatDays, "day").format("YYYY-MM-DD") : "",
+    }))
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const common = {
+        type: form.type,
+        description: form.description,
+        date: form.date,
+        next_due: form.next_due || null,
+        veterinarian: form.veterinarian || null,
+        notes: form.notes || null,
+      }
+      if (form.scope === "pigs") {
+        if (!form.pig_id) throw new Error("Choose a pig")
+        await apiRequest.post("/health-records/create", { ...common, pig_id: form.pig_id })
+        showSuccess("Saved", "Health record added")
+      } else {
+        const response = await apiRequest.post("/health-records/bulk", {
+          ...common,
+          scope: form.scope,
+          ...(form.scope === "pen" && { pen_id: form.pen_id }),
+        })
+        showSuccess("Saved", `Recorded for ${response.data.data.created} pigs`)
+      }
+      setAddOpen(false)
+      setForm(emptyForm)
+      setView(dayjs(form.date).isAfter(dayjs(), "day") || form.next_due ? "due" : "history")
+      setPage(1)
+      refresh()
+    } catch (err: any) {
+      showError("Error", err?.response?.data?.message || err?.message)
+    } finally {
+      setSaving(false)
     }
   }
 
-  const deleteHealthRecord = async (recordId:string) => {
+  const complete = async () => {
+    if (!completing) return
     try {
-      const resp = await axios.delete(
-        `${utils.apiUrl}/health/${recordId}`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
-      )
-      const deleted = resp?.data?.data ?? resp?.data
-      setLocalPigs(prev => prev.map(p => ({
-        ...p,
-        healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id)
-      })))
-      setPigRecords(prev => prev.filter(r => r.id !== deleted.id))
-      showSuccess('Success', 'Record deleted')
+      await apiRequest.post(`/health-records/complete/${completing.id}`, { next_due: nextDose || null })
+      showSuccess("Done", "Marked as given")
+      setCompleting(null)
+      setNextDose("")
+      refresh()
     } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message)
+      showError("Error", err?.response?.data?.message || err?.message)
     }
   }
 
-  const handleUpdateHealthRecord = async (recordId: string) => {
+  const remove = async (record: HealthRecord) => {
+    if (!window.confirm(`Delete "${record.description}" for pig ${record.pig_id}?`)) return
     try {
-      const resp = await axios.put(
-        `${utils.apiUrl}/health/${recordId}`,
-        { status: 'completed' },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }
-      )
-      const updated = resp?.data?.data ?? resp?.data
-      setLocalPigs(prev => prev.map(p => ({
-        ...p,
-        healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r)
-      })))
-      setPigRecords(prev => prev.map(r => r.id === updated.id ? updated : r))
-      showSuccess('Success', 'Record marked as completed')
+      await apiRequest.delete(`/health-records/delete/${record.id}`)
+      showSuccess("Deleted", "Health record deleted")
+      refresh()
     } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message)
+      showError("Error", err?.response?.data?.message || err?.message)
     }
   }
-  
-  useEffect(() => {
-    if (viewRecordsOpen && selectedPig?.pig_id) {
-      fetchPigHealthRecords(selectedPig.pig_id)
-    }
-  }, [viewRecordsOpen, selectedPig?.pig_id])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const cards = [
+    { label: "Overdue", value: summary?.overdue, hint: "Past their due date", tone: "text-red-600", icon: AlertTriangle, onClick: () => openDue("overdue") },
+    { label: "Due this week", value: summary?.due_this_week, hint: "Next 7 days", tone: "text-amber-600", icon: CalendarClock, onClick: () => openDue("week") },
+    { label: "Scheduled later", value: summary?.scheduled_later, hint: "After this week", tone: "text-blue-600", icon: Syringe, onClick: () => openDue("all") },
+    { label: "Given this month", value: summary?.done_this_month, hint: `${summary?.vaccinations_this_year ?? 0} vaccinations this year`, tone: "text-emerald-600", icon: CheckCircle2, onClick: () => { setView("history"); setPage(1) } },
+  ]
+
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
-      {/* Health Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mt-3 sm:mt-5">
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-red-600 dark:text-red-400">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-red-600 to-red-700 dark:from-red-400 dark:to-red-500 bg-clip-text text-transparent">
-              {overduePigs.length}
-            </div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Medications overdue</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-amber-600 dark:text-amber-400">Upcoming</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
-              {upcomingPigs.length}
-            </div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Due in 3 days</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-green-600 dark:text-green-400">Healthy</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-green-600 to-green-700 dark:from-green-400 dark:to-green-500 bg-clip-text text-transparent">
-              {healthyPigs.length}
-            </div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Up to date</p>
-          </CardContent>
-        </Card>
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 lg:grid-cols-4 sm:gap-4">
+        {cards.map(card => (
+          <Card key={card.label} role="button" tabIndex={0} onClick={card.onClick} onKeyDown={e => e.key === "Enter" && card.onClick()}
+            className="cursor-pointer bg-white/70 transition hover:shadow-lg dark:bg-gray-800/70">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">{card.label}</p>
+                <card.icon className={`h-4 w-4 ${card.tone}`} />
+              </div>
+              <p className={`mt-2 text-2xl font-bold ${card.tone}`}>{card.value ?? "–"}</p>
+              <p className="text-xs text-gray-500">{card.hint}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Overdue Medications */}
-      {overduePigs.length > 0 && (
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-red-50/80 to-red-100/80 dark:from-red-900/30 dark:to-red-800/30 border-b border-red-200 dark:border-red-700 pb-3 sm:pb-4">
-            <CardTitle className="flex items-center space-x-2 text-red-600 dark:text-red-400 text-base sm:text-lg">
-              <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span>Overdue Medications</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-3 sm:p-6">
-            <div className="space-y-3 sm:space-y-4">
-              {overduePigs.map((pig) => {
-                const healthRecords = pig?.healthRecords || []
-                return (
-                  <div
-                    key={pig.id}
-                    className="p-3 sm:p-4 border border-red-200 dark:border-red-700 bg-gradient-to-r from-red-50/80 to-red-100/80 dark:from-red-900/30 dark:to-red-800/30 rounded-lg"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-3 sm:space-y-0">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Pen {pig.pen_id}</p>
-                        <div className="mt-2 space-y-1">
-                          {healthRecords
-                            .filter(
-                              (record) =>
-                                record.nextDue && new Date(record.nextDue) < new Date() && record.status !== "completed",
-                            )
-                            .map((record, index) => (
-                              <div key={index} className="text-xs sm:text-sm">
-                                <span className="font-medium text-gray-900 dark:text-gray-100">{record.type}</span> -
-                                <span className="text-red-600 dark:text-red-400 ml-1">
-                                  Overdue by{" "}
-                                  {Math.ceil(
-                                    (new Date().getTime() - new Date(record.nextDue!).getTime()) / (1000 * 60 * 60 * 24),
-                                  )}{" "}
-                                  days
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 flex-shrink-0 w-full sm:w-auto"
-                        onClick={async () => {
-                          try {
-                            if (!user?.farm_id) { showError('Error', 'Missing farm details'); return }
-                            const overdue = healthRecords.filter((record) => record.nextDue && new Date(record.nextDue) < new Date() && record.status !== 'completed')
-                            const updatedRecords = [] as any[]
-                            for (const r of overdue) {
-                              const resp = await axios.put(`${utils.apiUrl}/health/${r.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                              const updated = resp?.data?.data ?? resp?.data
-                              updatedRecords.push(updated)
-                            }
-                            // update local state for this pig
-                            setLocalPigs(prev => prev.map(p => {
-                              if (p.pig_id !== pig.pig_id) return p
-                              const newRecords = (p.healthRecords || []).map(rec => {
-                                const u = updatedRecords.find(x => x.id === rec.id)
-                                return u ? u : rec
-                              })
-                              return { ...p, healthRecords: newRecords }
-                            }))
-                            showSuccess('Success', 'Marked overdue record(s) as completed')
-                          } catch (err: any) {
-                            showError('Error', err?.response?.data?.message || err?.message)
-                          }
-                        }}
-                      >
-                        <Pill className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                        <span className="text-xs sm:text-sm">Administer</span>
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
+      <Card className="bg-white/70 dark:bg-gray-800/70">
+        <CardHeader className="space-y-3 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-gray-700">
+              {(["due", "history"] as View[]).map(item => (
+                <button key={item} onClick={() => { setView(item); setPage(1) }}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === item ? "bg-white shadow dark:bg-gray-900" : "text-gray-600 dark:text-gray-300"}`}>
+                  {item === "due" ? "Due & scheduled" : "History"}
+                </button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Upcoming Medications */}
-      {upcomingPigs.length > 0 && (
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-amber-50/80 to-amber-100/80 dark:from-amber-900/30 dark:to-amber-800/30 border-b border-amber-200 dark:border-amber-700 pb-3 sm:pb-4">
-            <CardTitle className="flex items-center space-x-2 text-amber-600 dark:text-amber-400 text-base sm:text-lg">
-              <Calendar className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span>Upcoming Medications</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-3 sm:p-6">
-            <div className="space-y-3 sm:space-y-4">
-              {upcomingPigs.map((pig) => {
-                const healthRecords = pig?.healthRecords || []
-                return (
-                  <div
-                    key={pig.id}
-                    className="p-3 sm:p-4 border border-amber-200 dark:border-amber-700 bg-gradient-to-r from-amber-50/80 to-amber-100/80 dark:from-amber-900/30 dark:to-amber-800/30 rounded-lg"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-3 sm:space-y-0">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Pen {pig.pen_id}</p>
-                        <div className="mt-2 space-y-1">
-                          {healthRecords
-                            .filter((record) => {
-                              if (record.nextDue) {
-                                const dueDate = new Date(record.nextDue)
-                                const threeDaysFromNow = new Date(new Date().getTime() + 3 * 24 * 60 * 60 * 1000)
-                                return (
-                                  dueDate <= threeDaysFromNow && dueDate >= new Date() && record.status !== "completed"
-                                )
-                              }
-                              return false
-                            })
-                            .map((record, index) => (
-                              <div key={index} className="text-xs sm:text-sm flex items-center justify-between">
-                                <span className="font-medium text-gray-900 dark:text-gray-100">{record.type}</span> -
-                                <span className="text-amber-600 dark:text-amber-400 ml-1">
-                                  Due {new Date(record.nextDue!).toLocaleDateString()}
-                                </span>
-                                <div className="ml-2 flex items-center space-x-2">
-                                  <button onClick={async () => { try { const resp = await axios.put(`${utils.apiUrl}/health/${record.id}`, { status: 'completed' }, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const updated = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).map(r => r.id === updated.id ? updated : r) }))); showSuccess('Success', 'Record marked completed'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-emerald-700">Mark done</button>
-                                  <button onClick={async () => { try { const resp = await axios.delete(`${utils.apiUrl}/health/${record.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } }); const deleted = resp?.data?.data ?? resp?.data; setLocalPigs(prev => prev.map(p => ({ ...p, healthRecords: (p.healthRecords || []).filter(r => r.id !== deleted.id) }))); showSuccess('Success', 'Record deleted'); } catch (err: any) { showError('Error', err?.response?.data?.message || err?.message) } }} className="text-xs text-red-600">Delete</button>
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-white/50 dark:bg-gray-700/50 border-amber-300 dark:border-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30 flex-shrink-0 w-full sm:w-auto"
-                      >
-                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                        <span className="text-xs sm:text-sm">Schedule</span>
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
+            {can("health_records", "create") && (
+              <Button onClick={() => setAddOpen(true)} className="bg-gradient-to-r from-green-500 to-blue-500 text-white">
+                <Plus className="mr-2 h-4 w-4" />Record health work
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-48 flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pig, treatment, vet..." className="pl-9" />
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* All Pigs Health Status */}
-      <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-        <CardHeader className="pb-3 sm:pb-4">
-          <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-            <span className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">All Pigs Health Status</span>
-            <Dialog open={addOpen} onOpenChange={(v) => setAddOpen(v)}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white w-full sm:w-auto">
-                  <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                  <span className="text-xs sm:text-sm">Add Health Record</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Add health record</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
-                  try {
-                    const resp = await axios.post(`${utils.apiUrl}/health/${user.farm_id}`, form, { headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` } })
-                    const added = resp?.data?.data ?? resp?.data
-                    // add record into localPigs
-                    setLocalPigs(prev => prev.map(p => p.pig_id === added.pig_id ? { ...p, healthRecords: [added, ...(p.healthRecords || [])] } : p))
-                    showSuccess('Success', 'Health record added')
-                    setAddOpen(false)
-                  } catch (err: any) {
-                    showError('Error', err?.response?.data?.message || err?.message)
-                  }
-                }}>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs font-medium">Pig</label>
-                      <Select value={form.pig_id} onValueChange={(v) => setForm({ ...form, pig_id: v })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {localPigs?.map(p => <SelectItem key={p.pig_id ?? `${p.name}-${p.pen_id}`} value={p.pig_id ?? ''}>{p.name || p.pig_id || 'Unnamed pig'}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">Type</label>
-                      <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
-                        <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vaccination">Vaccination</SelectItem>
-                          <SelectItem value="treatment">Treatment</SelectItem>
-                          <SelectItem value="checkup">Checkup</SelectItem>
-                          <SelectItem value="medication">Medication</SelectItem>
-                          <SelectItem value="surgery">Surgery</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">Description</label>
-                      <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs font-medium">Date</label>
-                        <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium">Next due</label>
-                        <Input type="date" value={form.next_due} onChange={(e) => setForm({ ...form, next_due: e.target.value })} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">Veterinarian</label>
-                      <Input value={form.veterinarian} onChange={(e) => setForm({ ...form, veterinarian: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">Notes</label>
-                      <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                      <Button type="submit">Add</Button>
-                    </div>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
-
-          </CardTitle>
+            <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(1) }}
+              className="h-9 rounded-md border bg-white px-3 text-sm dark:bg-gray-900" aria-label="Type">
+              <option value="">All types</option>
+              {TYPES.map(type => <option key={type} value={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}
+            </select>
+            {view === "due" && (
+              <select value={dueFilter} onChange={e => { setDueFilter(e.target.value as DueFilter); setPage(1) }}
+                className="h-9 rounded-md border bg-white px-3 text-sm dark:bg-gray-900" aria-label="Due">
+                <option value="all">All due</option>
+                <option value="overdue">Overdue</option>
+                <option value="week">Due this week</option>
+              </select>
+            )}
+            {view === "history" && (
+              <DateRangePicker value={historyRange} onChange={next => { setHistoryRange(next); setPage(1) }} allowAll />
+            )}
+            {can("health_records", "export") && (
+              <ExportMenu
+                path="/health-records/export"
+                filename={view === "due" ? "health-due" : "health-history"}
+                params={{ filter, sort, search: debouncedSearch || undefined }}
+                className="h-9"
+              />
+            )}
+          </div>
         </CardHeader>
-        <CardContent className="p-3 sm:p-6">
-          <div className="space-y-3 sm:space-y-4">
-            {localPigs?.map((pig) => {
-              const status = getHealthStatus(pig)
-              const healthRecords = pig?.healthRecords || []
+        <CardContent>
+          {/* Phones: one card per record so the actions stay visible */}
+          <ul className="space-y-2 md:hidden">
+            {loading && records.length === 0 && <li className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></li>}
+            {!loading && records.length === 0 && <li className="py-10 text-center text-sm text-gray-500">{view === "due" ? "Nothing due. Well done!" : "No health records yet."}</li>}
+            {records.map(record => {
+              const due = view === "due" ? dueLabel(record) : null
               return (
-                <div
-                  key={pig.id}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 sm:space-y-0"
-                >
-                  <div className="flex-1">
-                    <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">{pig.name}</h4>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      Pen {penNamesConversion(pens, pig.pen_id ?? '')} • {pig.breed} • {pig.gender === "female" ? "Sow" : "Boar"}
-                    </p>
-                    <div className="mt-1 sm:mt-2">
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        Last health check:{" "}
-                        {healthRecords.length > 0
-                          ? new Date(healthRecords[healthRecords.length - 1].date).toLocaleDateString()
-                          : "Never"}
+                <li key={record.id} className={`rounded-xl border p-3 dark:border-gray-700 ${loading ? "opacity-60" : ""}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{record.description}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{record.pig_id}</span>
+                        {record.pig_name ? ` · ${record.pig_name}` : ""}
+                        {record.veterinarian ? ` · ${record.veterinarian}` : ""}
                       </p>
                     </div>
+                    <Badge variant="outline" className="shrink-0 text-[10px] capitalize">{record.type}</Badge>
                   </div>
-                  <div className="flex items-center justify-between sm:flex-row sm:items-center sm:space-x-3">
-                    <Badge
-                      variant={status === "overdue" ? "destructive" : status === "upcoming" ? "secondary" : "default"}
-                      className={`flex-shrink-0 text-xs sm:text-sm whitespace-nowrap ${status === "good"
-                        ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
-                        : status === "overdue"
-                          ? "bg-gradient-to-r from-red-500 to-red-600"
-                          : "bg-gradient-to-r from-amber-500 to-amber-600 text-white"
-                        }`}
-                    >
-                      {status === "overdue" ? "Overdue" : status === "upcoming" ? "Upcoming" : "Up to date"}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 ml-2 sm:ml-0 flex-shrink-0"
-                      onClick={() => {
-                        setSelectedPig(pig)
-                        setViewRecordsOpen(true)
-                      }}
-                    >
-                      <span className="text-xs sm:text-sm">View Records</span>
-                    </Button>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="text-xs">
+                      {view === "due" ? (
+                        <span className="flex items-center gap-1.5">
+                          {record.due_date && dayjs(record.due_date).format("D MMM YYYY")}
+                          {due && <Badge variant={due.tone} className="text-[10px]">{due.text}</Badge>}
+                        </span>
+                      ) : (
+                        <span>
+                          Given {dayjs(record.date).format("D MMM YYYY")}
+                          {record.next_due && <span className="text-gray-500"> · next {dayjs(record.next_due).format("D MMM")}</span>}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center">
+                      {view === "due" && can("health_records", "update") && (
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => setCompleting(record)}>
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Given
+                        </Button>
+                      )}
+                      {can("health_records", "delete") && (
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => remove(record)} aria-label="Delete record">
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </li>
               )
-            }) || []}
+            })}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-lg border md:block dark:border-gray-700">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900">
+                <tr>
+                  <th className="px-3 py-2">Pig</th>
+                  <th className="px-3 py-2">Treatment</th>
+                  <th className="px-3 py-2">{view === "due" ? "Due" : "Given"}</th>
+                  <th className="hidden px-3 py-2 md:table-cell">Vet</th>
+                  <th className="px-3 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && records.length === 0 && (
+                  <tr><td colSpan={5} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></td></tr>
+                )}
+                {!loading && records.length === 0 && (
+                  <tr><td colSpan={5} className="py-10 text-center text-gray-500">{view === "due" ? "Nothing due. Well done!" : "No health records yet."}</td></tr>
+                )}
+                {records.map(record => {
+                  const due = view === "due" ? dueLabel(record) : null
+                  return (
+                    <tr key={record.id} className={`border-t dark:border-gray-700 ${loading ? "opacity-60" : ""}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium">{record.pig_id}</div>
+                        {record.pig_name && <div className="text-xs text-gray-500">{record.pig_name}</div>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div>{record.description}</div>
+                        <Badge variant="outline" className="mt-0.5 text-[10px] capitalize">{record.type}</Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        {view === "due" ? (
+                          <>
+                            <div>{record.due_date && dayjs(record.due_date).format("D MMM YYYY")}</div>
+                            {due && <Badge variant={due.tone} className="mt-0.5 text-[10px]">{due.text}</Badge>}
+                          </>
+                        ) : (
+                          <>
+                            <div>{dayjs(record.date).format("D MMM YYYY")}</div>
+                            {record.next_due && <div className="text-xs text-gray-500">Next: {dayjs(record.next_due).format("D MMM")}</div>}
+                          </>
+                        )}
+                      </td>
+                      <td className="hidden px-3 py-2.5 md:table-cell">{record.veterinarian || "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                        {view === "due" && can("health_records", "update") && (
+                          <Button size="sm" variant="outline" className="mr-1" onClick={() => setCompleting(record)}>
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Given
+                          </Button>
+                        )}
+                        {can("health_records", "delete") && (
+                          <Button size="sm" variant="ghost" onClick={() => remove(record)} aria-label="Delete record">
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+            <span>{total.toLocaleString()} record{total === 1 ? "" : "s"}</span>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="px-2">Page {page} of {totalPages}</span>
+              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Dialog open={viewRecordsOpen} onOpenChange={setViewRecordsOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Health Records for {selectedPig?.name || selectedPig?.pig_id}
-            </DialogTitle>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Pen {penNamesConversion(pens, selectedPig?.pen_id ?? '')} • {selectedPig?.breed} • {selectedPig?.gender === "female" ? "Sow" : "Boar"}
-            </p>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            {loadingRecords ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500 dark:text-gray-400">Loading records...</p>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>Record health work</DialogTitle></DialogHeader>
+          <form onSubmit={submit} className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">Quick pick</label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {PRESETS.map(preset => (
+                  <button type="button" key={preset.label} onClick={() => applyPreset(preset)}
+                    className="rounded-full border px-2.5 py-1 text-xs hover:bg-blue-50 dark:hover:bg-gray-700">{preset.label}</button>
+                ))}
               </div>
-            ) : pigRecords && pigRecords.length > 0 ? (
-              pigRecords
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .map((record) => (
-                  <div
-                    key={record.id}
-                    className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
-                          {record.type}
-                        </h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(record.date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={record.status === 'completed' ? 'default' : 'secondary'}
-                        className={`${record.status === 'completed'
-                            ? 'bg-green-500 text-white'
-                            : 'bg-amber-500 text-white'
-                          }`}
-                      >
-                        {record.status}
-                      </Badge>
-                    </div>
-
-                    {record.description && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Description:</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.description}</p>
-                      </div>
-                    )}
-
-                    {record.veterinarian && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Veterinarian:</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.veterinarian}</p>
-                      </div>
-                    )}
-
-                    {record.nextDue && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Next Due:</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(record.nextDue).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </p>
-                      </div>
-                    )}
-
-                    {record.notes && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes:</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{record.notes}</p>
-                      </div>
-                    )}
-
-                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        Created: {new Date(record.created_at).toLocaleDateString()}
-                      </p>
-                      <div className="flex space-x-2">
-                        {record.status !== 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            onClick={() => handleUpdateHealthRecord(record.id)}
-                          >
-                            Mark Complete
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="text-xs"
-                          onClick={() => deleteHealthRecord(record.id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-500 dark:text-gray-400">No health records found for this pig.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Who</label>
+              <div className="mt-1 grid grid-cols-3 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-700">
+                {([["pigs", "One pig"], ["pen", "Whole pen"], ["all", "All pigs"]] as const).map(([value, label]) => (
+                  <button type="button" key={value} onClick={() => setForm({ ...form, scope: value })}
+                    className={`rounded-md py-1.5 text-xs font-medium ${form.scope === value ? "bg-white shadow dark:bg-gray-900" : ""}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+            {form.scope === "pigs" && (
+              <div>
+                <label className="text-xs font-medium">Pig tag</label>
+                <Input list="health-pig-options" value={form.pig_id} onChange={e => setForm({ ...form, pig_id: e.target.value })} placeholder="Type to search pig tag or name" required />
+                <datalist id="health-pig-options">
+                  {pigs.map(pig => <option key={pig.id ?? pig.pig_id} value={pig.pig_id}>{pig.name ?? ""}</option>)}
+                </datalist>
               </div>
             )}
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button variant="outline" onClick={() => setViewRecordsOpen(false)}>
-              Close
-            </Button>
-          </div>
+            {form.scope === "pen" && (
+              <div>
+                <label className="text-xs font-medium">Pen</label>
+                <select required value={form.pen_id} onChange={e => setForm({ ...form, pen_id: e.target.value })}
+                  className="h-9 w-full rounded-md border bg-white px-3 text-sm dark:bg-gray-900">
+                  <option value="">Choose pen</option>
+                  {pens.filter(pen => pen.is_occupied).map(pen => <option key={pen.id} value={pen.id}>{pen.name}</option>)}
+                </select>
+              </div>
+            )}
+            {form.scope === "all" && <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">This records the treatment for every live pig on the farm ({pigs.length}).</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium">Type</label>
+                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
+                  className="h-9 w-full rounded-md border bg-white px-3 text-sm capitalize dark:bg-gray-900">
+                  {TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Date given / planned</label>
+                <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Treatment / product</label>
+              <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="e.g. Erysipelas vaccine, Ivermectin 1%" required />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Next dose / booster due</label>
+              <div className="flex gap-1.5">
+                <Input type="date" value={form.next_due} onChange={e => setForm({ ...form, next_due: e.target.value })} />
+                {[["3 wk", 21], ["3 mo", 90], ["6 mo", 180]].map(([label, days]) => (
+                  <Button key={label} type="button" size="sm" variant="outline" onClick={() => setForm({ ...form, next_due: dayjs(form.date).add(Number(days), "day").format("YYYY-MM-DD") })}>{label}</Button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500">A future date (planned work) and the next dose both appear on the calendar.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Veterinarian</label>
+              <Input value={form.veterinarian} onChange={e => setForm({ ...form, veterinarian: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Notes</label>
+              <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(completing)} onOpenChange={open => !open && setCompleting(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Mark as given</DialogTitle></DialogHeader>
+          {completing && (
+            <div className="space-y-3">
+              <p className="text-sm">{completing.description} for pig <strong>{completing.pig_id}</strong>, given today.</p>
+              <div>
+                <label className="text-xs font-medium">Next dose due (optional)</label>
+                <Input type="date" value={nextDose} onChange={e => setNextDose(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setCompleting(null)}>Cancel</Button>
+                <Button onClick={complete}>Confirm</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

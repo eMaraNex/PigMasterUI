@@ -7,20 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import axios from "axios";
-import { useAuth } from "@/lib/auth-context";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
-import { MapPin, Building, Ruler, Globe, Clock, Locate, Check, ChevronsUpDown } from "lucide-react";
+import { MapPin, Building, Ruler, Globe, Locate } from "lucide-react";
 import type { FarmCreationModalProps } from "@/types/farms";
-import { timezones, breeds, colors } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { breeds, colors } from "@/lib/constants";
 import { useToast } from '@/lib/toast-provider';
+import { api } from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
 
 const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, onFarmCreated }) => {
     const { showSuccess, showError } = useToast();
-    const { user } = useAuth();
+    const dispatch = useAppDispatch();
     const [formData, setFormData] = useState({
         id: "",
         name: "",
@@ -29,12 +27,10 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
         longitude: "",
         size: "",
         description: "",
-        timezone: "UTC",
     });
     const [isLoading, setIsLoading] = useState(false);
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const [timezoneOpen, setTimezoneOpen] = useState(false)
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
@@ -80,8 +76,6 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
         if (!validateForm()) return;
         setIsLoading(true);
         try {
-            const token = localStorage.getItem("pig_farm_token");
-            if (!token) throw new Error("No authentication token found");
             const payload = {
                 name: formData.name,
                 location: formData.location || undefined,
@@ -89,40 +83,17 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
                 longitude: formData.longitude ? Number(formData.longitude) : undefined,
                 size: formData.size ? Number(formData.size) : undefined,
                 description: formData.description || undefined,
-                timezone: formData.timezone,
+                // Taken from the device so farmers never have to pick one.
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Nairobi",
                 breeds: breeds ?? {},
                 colors: colors ?? {},
             };
 
-            // Clear existing farm-related local storage
-            localStorage.removeItem("pig_farm_id");
-            localStorage.removeItem("pig_farm_data");
-
-            const response = await axios.post(`${utils.apiUrl}/farms`, payload, {
-                headers: { Authorization: `Bearer ${token}` },
+            const response = await axios.post(`${utils.apiUrl}/farms/create`, payload, {
+                
             });
 
-            const farmId = response.data.data.id;
-            const farmData = response.data.data;
-
-            // Set new farm data
-            let filteredUserDetails;
-            localStorage.setItem("pig_farm_id", farmId);
-            localStorage.setItem("pig_farm_data", JSON.stringify(farmData));
-            const userDetails = localStorage.getItem("pig_farm_user") ?? '';
-            filteredUserDetails = JSON.parse(userDetails);
-
-            filteredUserDetails.farm_id = farmId
-            localStorage.setItem(
-                "pig_farm_user",
-                JSON.stringify(filteredUserDetails)
-            );
-
-
-            // Update user object if it exists
-            if (user) {
-                user.farm_id = farmId;
-            }
+            dispatch(api.util.invalidateTags(["CurrentUser", "Farm"]));
             showSuccess('Success', `${formData.name} has been successfully created!`);
             // Reset form
             setFormData({
@@ -133,8 +104,7 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
                 longitude: "",
                 size: "",
                 description: "",
-                timezone: "UTC",
-            });
+                    });
 
             // Pass farm data to parent component
             onFarmCreated();
@@ -151,7 +121,6 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
             setIsLoading(false);
         }
     };
-    const selectedTimezone = timezones.find((tz) => tz.zone === formData.timezone)
 
     return (
       <Dialog open={isOpen} onOpenChange={() => onClose()}>
@@ -315,80 +284,6 @@ const FarmCreationModal: React.FC<FarmCreationModalProps> = ({ isOpen, onClose, 
                 placeholder="e.g., Main pig breeding farm"
                 className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="timezone"
-                className="text-sm font-medium dark:text-gray-200 flex items-center"
-              >
-                <Clock className="h-4 w-4 mr-2 text-teal-500" />
-                Timezone
-              </Label>
-              <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={timezoneOpen}
-                    className="w-full h-12 justify-between bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    <span className="truncate">
-                      {selectedTimezone
-                        ? `${selectedTimezone.name} - ${selectedTimezone.gmt}`
-                        : "Select timezone..."}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 z-50"
-                  side="bottom"
-                  align="start"
-                >
-                  <Command className="bg-white dark:bg-gray-800">
-                    <CommandInput
-                      placeholder="Search timezone..."
-                      className="h-9 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-0 focus:ring-0"
-                    />
-                    <CommandList className="max-h-[200px] overflow-y-auto scrollbar-thin">
-                      <CommandEmpty className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                        No timezone found.
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {timezones.map(timezone => (
-                          <CommandItem
-                            key={timezone.zone}
-                            value={timezone.zone}
-                            onSelect={value => {
-                              setFormData({ ...formData, timezone: value });
-                              setTimezoneOpen(false);
-                            }}
-                            className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5"
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                formData.timezone === timezone.zone
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col">
-                              <span className="font-medium">
-                                {timezone.name}
-                              </span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {timezone.gmt}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
             </div>
 
             {errors.submit && (

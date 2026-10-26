@@ -6,25 +6,38 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ALL_TIME, DateRangePicker, describeRange, rangeToDates, type DateRange } from "@/components/shared/date-range-picker";
+import { ExportMenu } from "@/components/shared/export-menu";
+import Pagination from "@/components/shared/pagination";
+import { fetchFresh } from "@/lib/redux/fetch-fresh";
+import { usePermissions } from "@/lib/permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, Calendar, Filter, Download, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, Filter, Trash2 } from "lucide-react";
 import { useCurrency } from "@/lib/currency-context";
 import { useAuth } from "@/lib/auth-context";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import type { EarningsRecord, ProductionRecord } from "@/types";
 import { useToast } from "@/lib/toast-provider";
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks";
+import { setFarmProduction } from "@/lib/redux/production/productionSlice";
+import { api } from "@/lib/redux/api";
 
 export default function EarningsTracker() {
   const { currency, formatAmount, convertToBaseCurrency, getCurrencySymbol } = useCurrency();
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
   const [earnings, setEarnings] = useState<EarningsRecord[]>([]);
-  const [production, setProduction] = useState<ProductionRecord[]>([]);
+  // Bumped after every write so the list reloads with the active date filter.
+  const [reloadKey, setReloadKey] = useState(0);
+  const production = useAppSelector(state => state.production.byFarm[user?.farm_id ?? ""] ?? []);
   const [filteredEarnings, setFilteredEarnings] = useState<EarningsRecord[]>([]);
-  const [dateFilter, setDateFilter] = useState("all");
-  const [customDateRange, setCustomDateRange] = useState({ start: "", end: "" });
+  const [range, setRange] = useState<DateRange>(ALL_TIME);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const { can } = usePermissions();
   const [addEarningsOpen, setAddEarningsOpen] = useState(false);
   const [addProductionOpen, setAddProductionOpen] = useState(false);
   const { showSuccess, showError, showWarn } = useToast();
@@ -67,8 +80,8 @@ export default function EarningsTracker() {
     if (!user?.farm_id) return;
     setDeletingId(earningId);
     try {
-      await axios.delete(`${utils.apiUrl}/earnings/${user.farm_id}/${earningId}`);
-      loadEarnings();
+      await axios.delete(`${utils.apiUrl}/earnings/delete/${earningId}`);
+      setReloadKey(key => key + 1);
     } catch (error) {
       console.error("Error deleting earning:", error);
     } finally {
@@ -112,127 +125,34 @@ export default function EarningsTracker() {
     }
   };
 
+  // Reload from the server whenever the date range changes or a record is written.
   useEffect(() => {
-    if (user?.farm_id) {
-      loadEarnings();
-      loadProduction();
-    }
-  }, [user?.farm_id]);
-
-  // When the date filter or custom date range changes we request server-side filtered data
-  useEffect(() => {
-    // If user isn't loaded, bail
     if (!user?.farm_id) return;
-
-    // If the filter is 'all' just fetch everything from server
-    if (dateFilter === 'all') {
-      loadEarnings();
-      return;
-    }
-
-    // For other filters compute date_from/date_to and call loadEarnings
-    const now = new Date();
-    let date_from: string | undefined;
-    let date_to: string | undefined;
-
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-
-    switch (dateFilter) {
-      case 'today':
-        date_from = fmt(now);
-        date_to = fmt(now);
-        break;
-      case 'week':
-        date_from = fmt(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
-        date_to = fmt(now);
-        break;
-      case 'month':
-        date_from = fmt(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
-        date_to = fmt(now);
-        break;
-      case 'year':
-        date_from = fmt(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-        date_to = fmt(now);
-        break;
-      case 'custom':
-        if (customDateRange.start && customDateRange.end) {
-          date_from = customDateRange.start;
-          date_to = customDateRange.end;
-        }
-        break;
-    }
-
-    loadEarnings({ date_from, date_to });
-  }, [dateFilter, customDateRange, user?.farm_id]);
+    const { from, to } = rangeToDates(range);
+    setPage(1);
+    loadEarnings({ date_from: from, date_to: to });
+  }, [range, user?.farm_id, reloadKey]);
 
   const loadEarnings = async (filters: { date_from?: string; date_to?: string } = {}) => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        showError('Error', "No authentication token found")
-      }
-
-      const params = new URLSearchParams();
-      if (filters?.date_from) params.append('date_from', filters.date_from);
-      if (filters?.date_to) params.append('date_to', filters.date_to);
-      // optional: accept filters.type etc in the future
-
-      const url = `${utils.apiUrl}/earnings/${user?.farm_id}${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setEarnings(response.data.data || []);
-      setFilteredEarnings(response.data.data || []);
+      const farmId = user?.farm_id;
+      if (!farmId) return;
+      const records = await fetchFresh<EarningsRecord, { farmId: string; date_from?: string; date_to?: string }>(
+        dispatch, api.endpoints.getEarnings, { farmId, ...filters },
+      );
+      // RTK Query results are frozen; keep mutable copies because the table sorts in place.
+      setEarnings([...records]);
+      setFilteredEarnings([...records]);
     } catch (error) {
       showError('Error', error?.toString())
       setEarnings([]);
     }
   };
 
-  const loadProduction = () => {
-    const productionData = JSON.parse(localStorage.getItem(`pig_farm_production_${user?.farm_id}`) || "[]");
-    setProduction(productionData);
-  };
-
   const saveProductionToStorage = (data: ProductionRecord[]) => {
-    localStorage.setItem(`pig_farm_production_${user?.farm_id}`, JSON.stringify(data));
-  };
-
-  const filterEarnings = () => {
-    let filtered = [...earnings];
-    const now = new Date();
-
-    switch (dateFilter) {
-      case "today":
-        filtered = earnings.filter((e) => {
-          const earningDate = new Date(e.date);
-          return earningDate.toDateString() === now.toDateString();
-        });
-        break;
-      case "week":
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        filtered = earnings.filter((e) => new Date(e.date) >= weekAgo);
-        break;
-      case "month":
-        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        filtered = earnings.filter((e) => new Date(e.date) >= monthAgo);
-        break;
-      case "year":
-        const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-        filtered = earnings.filter((e) => new Date(e.date) >= yearAgo);
-        break;
-      case "custom":
-        if (customDateRange.start && customDateRange.end) {
-          filtered = earnings.filter((e) => {
-            const earningDate = new Date(e.date);
-            return earningDate >= new Date(customDateRange.start) && earningDate <= new Date(customDateRange.end);
-          });
-        }
-        break;
+    if (user?.farm_id) {
+      dispatch(setFarmProduction({ farmId: user.farm_id, records: data }));
     }
-
-    setFilteredEarnings(filtered);
   };
 
   const handleAddEarnings = async (e: React.FormEvent) => {
@@ -244,10 +164,7 @@ export default function EarningsTracker() {
     }
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        showError('Error', "No authentication token found")
-      }
+
       const finalSaleType = earningsForm.sale_type || getDefaultSaleType(earningsForm.type);
       const newEarning: EarningsRecord = {
         type: earningsForm.type,
@@ -265,12 +182,11 @@ export default function EarningsTracker() {
         farm_id: user.farm_id,
       };
 
-      await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, newEarning, {
-        headers: { Authorization: `Bearer ${token}` },
+      await axios.post(`${utils.apiUrl}/earnings/create`, newEarning, {
+        
       });
 
-      const updatedEarnings = [...earnings, newEarning];
-      setEarnings(updatedEarnings);
+      setReloadKey(key => key + 1);
       setEarningsForm({
         type: "other",
         amount: "",
@@ -303,15 +219,10 @@ export default function EarningsTracker() {
     };
 
     const updatedProduction = [...production, newProduction];
-    setProduction(updatedProduction);
     saveProductionToStorage(updatedProduction);
 
     if (productionForm.sellImmediately && productionForm.salePrice) {
       try {
-        const token = localStorage.getItem("pig_farm_token");
-        if (!token) {
-          showError('Error', "No authentication token found")
-        }
 
         const saleEarning: EarningsRecord = {
           type: productionForm.type === "urine" ? "urine_sale" : "manure_sale",
@@ -324,12 +235,11 @@ export default function EarningsTracker() {
           farm_id: user.farm_id,
         };
 
-        await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, saleEarning, {
-          headers: { Authorization: `Bearer ${token}` },
+        await axios.post(`${utils.apiUrl}/earnings/create`, saleEarning, {
+          
         });
 
-        const updatedEarnings = [...earnings, saleEarning];
-        setEarnings(updatedEarnings);
+        setReloadKey(key => key + 1);
         showSuccess('Success', 'Production and sale recorded successfully!');
       } catch (error: any) {
         showError('Error', 'Error adding production sale earnings')
@@ -375,6 +285,12 @@ export default function EarningsTracker() {
 
   const earningsByType = getEarningsByType();
 
+  // Newest first, one page at a time; totals above still cover the whole date range.
+  const sortedEarnings = [...filteredEarnings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const pageCount = Math.max(1, Math.ceil(sortedEarnings.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedEarnings = sortedEarnings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
       {/* Summary Cards */}
@@ -388,7 +304,7 @@ export default function EarningsTracker() {
               {formatAmount(getTotalEarnings())}
             </div>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-              {dateFilter === "all" ? "All time" : `${dateFilter.charAt(0).toUpperCase() + dateFilter.slice(1)} period`}
+              {describeRange(range)}
             </p>
           </CardContent>
         </Card>
@@ -902,56 +818,18 @@ export default function EarningsTracker() {
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-xs sm:text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                  <SelectItem value="year">This Year</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {dateFilter === "custom" && (
-              <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                <Input
-                  type="date"
-                  value={customDateRange.start}
-                  onChange={(e) =>
-                    setCustomDateRange({
-                      ...customDateRange,
-                      start: e.target.value,
-                    })
-                  }
-                  className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
-                />
-                <span className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm">to</span>
-                <Input
-                  type="date"
-                  value={customDateRange.end}
-                  onChange={(e) =>
-                    setCustomDateRange({
-                      ...customDateRange,
-                      end: e.target.value,
-                    })
-                  }
-                  className="w-full sm:w-40 bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
-                />
-              </div>
+            <DateRangePicker value={range} onChange={setRange} allowAll className="w-full sm:w-60" />
+            {can("earnings", "export") && (
+              <ExportMenu
+                path="/earnings/export"
+                filename="earnings"
+                className="h-9 w-full sm:w-auto"
+                params={{
+                  sort: [{ field: "date", order: "desc" }],
+                  ...(range.preset !== "all" ? { dateRange: { field: "date", ...rangeToDates(range) } } : {}),
+                }}
+              />
             )}
-            <Button
-              variant="outline"
-              className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 w-full sm:w-auto"
-            >
-              <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-              <span className="text-xs sm:text-sm">Export</span>
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -964,9 +842,7 @@ export default function EarningsTracker() {
         <CardContent className="p-3 sm:p-6">
           <div className="space-y-3 sm:space-y-4">
             {filteredEarnings.length > 0 ? (
-              filteredEarnings
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .map((earning, index) => (
+              pagedEarnings.map((earning, index) => (
                   <div
                     key={`${earning.id || index}-${earning.created_at || earning.date}`}
                     className="flex flex-col lg:flex-row lg:items-center lg:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 lg:space-y-0"
@@ -1056,6 +932,18 @@ export default function EarningsTracker() {
                 <span className="text-2xl sm:text-3xl mx-auto mb-4 opacity-50">{getCurrencySymbol(currency)}</span>
                 <p className="text-sm sm:text-base">No earnings records found for the selected period.</p>
               </div>
+            )}
+            {filteredEarnings.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredEarnings.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={size => { setPageSize(size); setPage(1); }}
+                pageSizeOptions={[10, 20, 50, 100]}
+                currentPageItems={pagedEarnings.length}
+                className="pt-2"
+              />
             )}
           </div>
         </CardContent>

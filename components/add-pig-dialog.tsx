@@ -11,15 +11,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Circle as PigIcon, Check, ChevronsUpDown } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { apiRequest as axios } from "@/lib/api/client";
 import { generatePigId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import axios from "axios";
 import * as utils from "@/lib/utils";
 import { AddPigDialogProps, Pen, Pig, Row } from "@/types";
 import { breeds, colors } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
 import { Checkbox } from "./ui/checkbox";
 import PreferenceModal from "./preference-modal";
+import {
+  api,
+  useGetFarmQuery,
+  useGetPigsQuery,
+  useGetPensQuery,
+  useGetRowsQuery,
+} from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
+
+const EMPTY_ROWS: Row[] = [];
+const EMPTY_PENS: Pen[] = [];
+const EMPTY_PIGS: Pig[] = [];
 
 export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, onPigAdded }: AddPigDialogProps) {
   const { user } = useAuth();
@@ -37,9 +49,18 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     pen_id: customPens ? "" : pen_id,
   });
 
-  const [rows, setRows] = useState<Row[]>([]);
-  const [pens, setPens] = useState<Pen[]>([]);
-  const [filteredPens, setFilteredPens] = useState<Pen[]>([]);
+  const { data: rows = EMPTY_ROWS } = useGetRowsQuery(user?.farm_id ?? "", {
+    skip: !customPens || !user?.farm_id,
+  });
+  const { data: pens = EMPTY_PENS } = useGetPensQuery(user?.farm_id ?? "", {
+    skip: !customPens || !user?.farm_id,
+  });
+  const { data: farmData } = useGetFarmQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const { data: farmPigs = EMPTY_PIGS } = useGetPigsQuery(user?.farm_id ?? "", { skip: !user?.farm_id });
+  const filteredPens = useMemo(
+    () => formData.row_id ? pens.filter(pen => pen.row_id === formData.row_id) : EMPTY_PENS,
+    [formData.row_id, pens],
+  );
   const [rowOpen, setRowOpen] = useState(false);
   const [penOpen, setPenOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
@@ -50,54 +71,21 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
   const [isColorModalOpen, setIsColorModalOpen] = useState(false);
   const [farmBreeds, setFarmBreeds] = useState<string[]>([]);
   const [farmColors, setFarmColors] = useState<string[]>([]);
-
-  const farmData = useMemo(() => {
-    const data = localStorage.getItem('pig_farm_data');
-    return data ? JSON.parse(data) : {};
-  }, []);
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
-    setFarmBreeds(farmData.breeds || breeds);
-    setFarmColors(farmData.colors || colors);
+    setFarmBreeds(Array.isArray(farmData?.breeds) ? farmData.breeds as string[] : breeds);
+    setFarmColors(Array.isArray(farmData?.colors) ? farmData.colors as string[] : colors);
   }, [farmData]);
 
   useEffect(() => {
-    if (customPens && user?.farm_id) {
-      // Load rows from localStorage
-      const rowsData = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
-      if (rowsData) {
-        const parsedRows = JSON.parse(rowsData);
-        setRows(parsedRows.filter((row: Row) => row.is_deleted === 0));
-      }
-
-      // Load pens from localStorage
-      const pensData = localStorage.getItem(`pig_farm_pens_${user.farm_id}`);
-      if (pensData) {
-        const parsedPens = JSON.parse(pensData);
-        setPens(parsedPens.filter((pen: Pen) => pen.is_deleted === 0));
-      }
-    }
-  }, [customPens, user?.farm_id]);
-
-  useEffect(() => {
-    if (formData.row_id) {
-      const availablePens = pens.filter(pen => pen.row_id === formData.row_id);
-      setFilteredPens(availablePens);
-      // Reset pen selection when row changes
-      setFormData(prev => ({ ...prev, pen_id: "" }));
-      setSelectedPen(null);
-    } else {
-      setFilteredPens([]);
-    }
-  }, [formData.row_id, pens]);
-
-  const saveToStorage = (farmId: string, pigs: Pig[]) => {
-    try {
-      localStorage.setItem(`pig_farm_pigs_${farmId}`, JSON.stringify(pigs));
-    } catch (error) {
-      showError('Error', String(error));
-    }
-  };
+    const farmId = user?.farm_id;
+    if (!farmId) return;
+    const nextPigId = generatePigId(farmId, farmData?.name, farmPigs);
+    setFormData(current => current.pig_id === nextPigId
+      ? current
+      : { ...current, pig_id: nextPigId });
+  }, [farmData?.name, farmPigs, user?.farm_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,19 +120,15 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     };
 
     try {
-      const response = await axios.post(`${utils.apiUrl}/pigs/${user.farm_id}`, newPig, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+      const response = await axios.post(`${utils.apiUrl}/pigs/create`, newPig, {
+        
       });
       if (response.data.success) {
         const addedPig: Pig = {
           ...response.data.data,
           pen_name: finalPenName
         };
-        // Update local storage
-        const cachedPigs = localStorage.getItem(`pig_farm_pigs_${user.farm_id}`);
-        const existingPigs: Pig[] = cachedPigs ? JSON.parse(cachedPigs) : [];
-        const updatedPigs = [...existingPigs, addedPig];
-        saveToStorage(user.farm_id, updatedPigs);
+        dispatch(api.util.invalidateTags([{ type: "Pig", id: user.farm_id }]));
         showSuccess('Success', 'Pig added successfully');
         onPigAdded(addedPig);
         onClose();
@@ -160,13 +144,13 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     if (!user?.farm_id) return;
     try {
       const response = await axios.put(
-        `${utils.apiUrl}/farms/${user.farm_id}`,
+        `${utils.apiUrl}/farms/update/${user.farm_id}`,
         { breeds: newBreeds },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } }
+        { }
       );
       if (response.data.success) {
         const updatedFarm = response.data.data;
-        localStorage.setItem('pig_farm_data', JSON.stringify(updatedFarm));
+        dispatch(api.util.invalidateTags([{ type: "Farm", id: user.farm_id }]));
         setFarmBreeds(newBreeds);
       } else {
         throw new Error('Failed to update breeds');
@@ -181,13 +165,13 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
     if (!user?.farm_id) return;
     try {
       const response = await axios.put(
-        `${utils.apiUrl}/farms/${user.farm_id}`,
+        `${utils.apiUrl}/farms/update/${user.farm_id}`,
         { colors: newColors },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } }
+        { }
       );
       if (response.data.success) {
         const updatedFarm = response.data.data;
-        localStorage.setItem('pig_farm_data', JSON.stringify(updatedFarm));
+        dispatch(api.util.invalidateTags([{ type: "Farm", id: user.farm_id }]));
         setFarmColors(newColors);
       } else {
         throw new Error('Failed to update colors');
@@ -327,8 +311,10 @@ export default function AddPigDialog({ pen_name, pen_id, customPens, onClose, on
                                   setFormData({
                                     ...formData,
                                     row_id: row.id ?? "",
+                                    pen_id: "",
                                   });
                                   setSelectedRow(row);
+                                  setSelectedPen(null);
                                   setRowOpen(false);
                                 }}
                                 className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5"

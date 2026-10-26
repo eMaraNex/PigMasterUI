@@ -7,13 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Building, Circle, Plus, Trash2, History, Eye, AlertTriangle, Expand, MoreVertical, Edit, PiggyBank } from "lucide-react";
+import { Building, Plus, Trash2, AlertTriangle, Expand, MoreVertical, Edit } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import AddPigDialog from "@/components/add-pig-dialog";
-import RemovePigDialog from "@/components/remove-pig-dialog";
+import PenDetailSheet from "@/components/pen-detail-sheet";
+import { usePermissions } from "@/lib/permissions";
 import type { Pen, PenLayoutProps, Pig as PigType, Row } from "@/types";
 import * as utils from "@/lib/utils";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-provider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -21,14 +22,13 @@ import RowDialog from "./add-row-dialog";
 
 export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, onRowAdded, handleAddRow }: PenLayoutProps) {
   const [selectedPen, setSelectedPen] = useState<string | null>(null);
+  const { can } = usePermissions();
   const [addPigOpen, setAddPigOpen] = useState(false);
   const [removePigOpen, setRemovePigOpen] = useState(false);
   const [addPenOpen, setAddPenOpen] = useState(false);
   const [removePenOpen, setRemovePenOpen] = useState(false);
   const [expandCapacityOpen, setExpandCapacityOpen] = useState(false);
   const [penToRemove, setPenToRemove] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [removalHistory, setRemovalHistory] = useState<any[]>([]);
   const [pigs, setPigs] = useState<PigType[]>(initialPigs);
   const [newPenData, setNewPenData] = useState({ row_name: "", row_id: "", level: "", position: "1" });
   const [expandRowData, setExpandRowData] = useState({ row_name: "", row_id: "", additionalCapacity: "" });
@@ -49,22 +49,15 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
 
   const handleDeleteRow = async (rowId: string, rowName: string) => {
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       if (!user?.farm_id) throw new Error("Farm ID missing");
 
-      const data = await axios.delete(`${utils.apiUrl}/rows/delete/${user.farm_id}/${rowId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const data = await axios.delete(`${utils.apiUrl}/rows/delete/${rowId}`, {
+        
       });
 
       if (data) {
         showSuccess("Success", `Row ${rowName} deleted successfully!`);
-        const rowsString = localStorage.getItem(`pig_farm_rows_${user.farm_id}`);
-        if (rowsString) {
-          const currentRows = JSON.parse(rowsString);
-          const updatedRows = currentRows.filter((row: any) => row.id !== rowId);
-          localStorage.setItem(`pig_farm_rows_${user.farm_id}`, JSON.stringify(updatedRows));
-        }
       }
 
       if (selectedPen && pens.find(h => h.row_name === rowName && h.name === selectedPen)) {
@@ -105,58 +98,12 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
     return pens.filter((pen) => pen.row_id === row_id);
   }, [pens]);
 
-  const getRemovalHistory = useCallback(async (penId: string) => {
-    try {
-      const token = localStorage.getItem("pig_farm_token");
-      const cachedUser = JSON.parse(localStorage.getItem("pig_farm_user") || "{}");
-      const farmId = user?.farm_id ?? cachedUser?.farm_id;
-      if (!farmId || !token) {
-        showError('Error', 'Authentication required.')
-        return [];
-      }
-
-      const response = await axios.get(`${utils.apiUrl}/pens/${farmId}/${penId}/history`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const newRemovalRecords = response.data?.data || [];
-      const filteredRecords = newRemovalRecords.filter((record: any) => record.pen_id === penId && record.removed_at !== null);
-      localStorage.setItem("pig_farm_pig_removals", JSON.stringify(filteredRecords));
-      return filteredRecords;
-    } catch (error) {
-      showError('Error', 'Error fetching removal history. Please try again later.')
-      return [];
-    }
-  }, [user]);
-
-  useEffect(() => {
-    const fetchRemovalHistory = async () => {
-      if (selectedPenDetails?.id) {
-        const history = await getRemovalHistory(selectedPenDetails.id);
-        setRemovalHistory(history);
-      }
-    };
-    fetchRemovalHistory();
-  }, [selectedPenDetails, getRemovalHistory]);
-
-  const handleRemovalSuccess = useCallback(async (removedPigId: string) => {
-    if (selectedPenDetails?.id) {
-      setPigs((prev) => prev.filter((r) => r.pig_id !== removedPigId));
-      const history = await getRemovalHistory(selectedPenDetails.id);
-      setRemovalHistory(history);
-      setShowHistory(true);
-    }
-  }, [selectedPenDetails, getRemovalHistory]);
-
   const handlePenClick = (penId: string) => {
     setSelectedPen(penId);
   };
 
   const handleAddPig = () => {
     setAddPigOpen(true);
-  };
-
-  const handleRemovePig = () => {
-    setRemovePigOpen(true);
   };
 
   const handleAddPen = (row_name: string) => {
@@ -195,17 +142,16 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         return;
       }
 
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
+      if (!user?.farm_id) throw new Error("Farm ID missing");
       const response = await axios.post(
-        `${utils.apiUrl}/rows/expand`,
+        `${utils.apiUrl}/rows/expand/${row.id}`,
         {
           row_id: row.id ?? "",
           name: expandRowData.row_name,
           farm_id: user?.farm_id,
           additionalCapacity: additionalCapacity,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { }
       );
 
       if (response.data.success) {
@@ -241,10 +187,9 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         is_occupied: false,
         is_deleted: 0,
       };
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
-      await axios.post(`${utils.apiUrl}/pens/${user?.farm_id}`, newPen, {
-        headers: { Authorization: `Bearer ${token}` },
+      if (!user?.farm_id) throw new Error("Farm ID missing");
+      await axios.post(`${utils.apiUrl}/pens/create`, newPen, {
+        
       });
       showSuccess('Success', `Pen ${penName} added successfully!`)
       setAddPenOpen(false);
@@ -262,10 +207,9 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         showWarn('Warn', "Cannot remove pen with pigs. Please remove pigs first.")
         return;
       }
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) throw new Error("Authentication token missing");
-      await axios.delete(`${utils.apiUrl}/pens/${user?.farm_id}/${pen.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      if (!user?.farm_id) throw new Error("Farm ID missing");
+      await axios.delete(`${utils.apiUrl}/pens/delete/${pen.id}`, {
+        
       });
       showSuccess('Success', `Pen ${pen.name} removed successfully!`);
       setRemovePenOpen(false);
@@ -285,7 +229,6 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
     setExpandCapacityOpen(false);
     setEditRowOpen(false);
     setPenToRemove(null);
-    setShowHistory(false);
     setExpandRowData({ row_name: "", row_id: "", additionalCapacity: "" });
     setEditRowData({ row_id: "", row_name: "", description: "" });
     if (!addPigOpen && !removePigOpen && !addPenOpen && !removePenOpen && !expandCapacityOpen && !editRowOpen) {
@@ -296,8 +239,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
   const handlePigAdded = useCallback(
     (newPig: PigType) => {
       setPigs((prev) => [...prev, newPig]);
-      setShowHistory(false);
-      setAddPigOpen(false);
+        setAddPigOpen(false);
       if (onRowAdded) onRowAdded();
       showSuccess('Success', `Pig ${newPig.pig_id} has been added successfully!`)
 
@@ -558,8 +500,11 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
                                     </div>
                                     {isOccupied ? (
                                       <>
-                                        <Circle className="h-3 w-3 md:h-4 md:w-4 mx-auto text-green-600 dark:text-green-400 mb-1" />
-                                        <div className="text-xs text-green-700 dark:text-green-300">
+                                        {/* Total pigs, then the sows/boars breakdown, so both read at a glance */}
+                                        <div className="text-lg md:text-xl font-bold leading-none text-green-700 dark:text-green-300">
+                                          {pigsInPen.length}
+                                        </div>
+                                        <div className="mt-1 text-xs leading-tight text-green-700 dark:text-green-300">
                                           {utils.formatPigCount(sows, boars)}
                                         </div>
                                       </>
@@ -571,7 +516,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
                                         </div>
                                       </>
                                     )}
-                                    <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {can("pens", "delete") && <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Button
                                         size="sm"
                                         variant="destructive"
@@ -585,7 +530,7 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
                                       >
                                         <Trash2 className="h-3 w-3" />
                                       </Button>
-                                    </div>
+                                    </div>}
                                   </CardContent>
                                 </Card>
                               );
@@ -707,254 +652,14 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         </Dialog>
       )}
 
-      {/* Pen Details Modal */}
-      {selectedPen && !removePenOpen && (
-        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 z-50">
-          <Card
-            key={selectedPen}
-            className="w-full max-w-sm md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-white/20 dark:border-gray-600/20 shadow-2xl"
-          >
-            <CardHeader className="bg-gradient-to-r from-green-50/80 to-blue-50/80 dark:from-green-900/30 dark:to-blue-900/30 border-b border-gray-200 dark:border-gray-600 p-4 md:p-6">
-              <CardTitle className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0 gap-2 md:gap-4">
-                <span className="text-base md:text-lg lg:text-xl text-gray-900 dark:text-gray-100 truncate">
-                  Pen Details - {selectedPen}
-                </span>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowHistory(!showHistory)}
-                    className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-xs md:text-sm"
-                  >
-                    <History className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
-                    <span className="hidden sm:inline">
-                      {showHistory ? "Hide History" : "Show History"}
-                    </span>
-                    <span className="sm:hidden">History</span>
-                  </Button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-4 md:space-y-6 bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-4 md:p-6">
-              {(() => {
-                const pen = getPen(selectedPen);
-                const pigsInPen = getPigsInPen(selectedPen);
-
-                return (
-                  <>
-                    {pen ? (
-                      <>
-                        {/* Pen Information */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 p-3 md:p-4 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                          <div>
-                            <h4 className="font-medium text-blue-800 dark:text-blue-300 text-sm md:text-base">
-                              Location
-                            </h4>
-                            <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {pen.row_name} Row - Level {pen.level},
-                              Position {pen.position}
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-blue-800 dark:text-blue-300 text-sm md:text-base">
-                              Specifications
-                            </h4>
-                            <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {pen.size} size, {pen.material} material
-                            </p>
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-blue-800 dark:text-blue-300 text-sm md:text-base">
-                              Features
-                            </h4>
-                            <p className="text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                              {pen.features.join(", ")}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Current Pigs */}
-                        <div>
-                          <div className="flex items-center justify-between mb-3 md:mb-4">
-                            <h4 className="font-medium text-base md:text-lg text-gray-900 dark:text-gray-100">
-                              Current Pigs ({pigsInPen.length})
-                            </h4>
-                            <Badge
-                              variant={
-                                pigsInPen.length > 0
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className={`${pigsInPen.length > 0
-                                ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
-                                : ""
-                                } text-xs md:text-sm`}
-                            >
-                              {pigsInPen.length > 0 ? "Occupied" : "Empty"}
-                            </Badge>
-                          </div>
-
-                          {pigsInPen.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                              {pigsInPen.map(pig => (
-                                <Card
-                                  key={pig.id}
-                                  className="bg-gradient-to-br from-green-50/80 to-green-100/80 dark:from-green-900/30 dark:to-green-800/30 border-green-200 dark:border-green-700"
-                                >
-                                  <CardContent className="p-3 md:p-4">
-                                    <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm md:text-base truncate">
-                                          {pig.pig_id}
-                                        </p>
-                                        <p className="text-xs md:text-sm text-gray-600 dark:text-gray-300">
-                                          {pig.breed} •{" "}
-                                          {pig.gender === "female"
-                                            ? "Sow"
-                                            : "Boar"}
-                                        </p>
-                                        <p className="text-xs md:text-sm text-gray-600 dark:text-gray-300">
-                                          {pig.color} • {pig.weight}kg
-                                        </p>
-                                        {pig.is_pregnant && (
-                                          <Badge
-                                            variant="outline"
-                                            className="mt-1 text-xs bg-pink-50 dark:bg-pink-900/30 border-pink-200 dark:border-pink-700 text-pink-800 dark:text-pink-300"
-                                          >
-                                            Pregnant
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => onPigSelect(pig)}
-                                        className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-xs md:text-sm flex-shrink-0"
-                                      >
-                                        <Eye className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                                        View
-                                      </Button>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center py-6 md:py-8 bg-gradient-to-br from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600">
-                                <PiggyBank className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-                              <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-                                No pigs in this pen
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* History Section */}
-                        {showHistory && (
-                          <div>
-                            <h4 className="font-medium text-base md:text-lg mb-3 md:mb-4 text-gray-900 dark:text-gray-100">
-                              Removal History ({removalHistory?.length})
-                            </h4>
-                            {removalHistory?.length > 0 ? (
-                              <div className="space-y-2 md:space-y-3 max-h-48 md:max-h-60 overflow-y-auto">
-                                {removalHistory?.map(
-                                  (record: any, index: number) => (
-                                    <Card
-                                      key={index}
-                                      className="bg-gradient-to-br from-red-50/80 to-red-100/80 dark:from-red-900/30 dark:to-red-800/30 border-red-200 dark:border-red-700"
-                                    >
-                                      <CardContent className="p-3">
-                                        <div className="flex flex-col space-y-1 md:flex-row md:justify-between md:items-start md:space-y-0">
-                                          <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-red-800 dark:text-red-300 text-sm md:text-base truncate">
-                                              {record.pig_id}
-                                            </p>
-                                            <p className="text-xs md:text-sm text-red-600 dark:text-red-400">
-                                              Reason: {record.removal_reason}
-                                            </p>
-                                            {record.removal_notes && (
-                                              <p className="text-xs md:text-sm text-red-600 dark:text-red-400">
-                                                Notes: {record.removal_notes}
-                                              </p>
-                                            )}
-                                          </div>
-                                          <div className="text-right flex-shrink-0">
-                                            <p className="text-xs text-red-500 dark:text-red-400">
-                                              {new Date(
-                                                record.removed_at
-                                              ).toLocaleDateString()}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  )
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-center py-3 md:py-4 bg-gradient-to-br from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 rounded-lg border border-gray-200 dark:border-gray-600">
-                                <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
-                                  No removal history for this pen
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
-                        Pen not found.
-                      </p>
-                    )}
-                  </>
-                );
-              })()}
-
-              {/* Action Buttons */}
-              <div className="flex flex-col space-y-2 md:flex-row md:justify-end md:space-y-0 md:space-x-3 pt-3 md:pt-4 border-t border-gray-200 dark:border-gray-600">
-                {(() => {
-                  const pen = getPen(selectedPen);
-                  const pigsInPen = pen
-                    ? getPigsInPen(selectedPen)
-                    : [];
-
-                  return (
-                    <>
-                      {pigsInPen.length < 2 && (
-                        <Button
-                          onClick={handleAddPig}
-                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm md:text-base w-full md:w-auto"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Pig
-                        </Button>
-                      )}
-                      {pigsInPen.length > 0 && (
-                        <Button
-                          variant="destructive"
-                          onClick={handleRemovePig}
-                          className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-sm md:text-base w-full md:w-auto"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Remove Pig
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        onClick={handleCloseDialogs}
-                        className="bg-white/50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-sm md:text-base w-full md:w-auto"
-                      >
-                        Close
-                      </Button>
-                    </>
-                  );
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Pen details: side panel with the pigs in the pen and its history */}
+      <PenDetailSheet
+        penId={selectedPen && !removePenOpen && !addPigOpen ? selectedPenDetails?.id ?? null : null}
+        pens={pens}
+        onClose={() => { setSelectedPen(null); setSelectedPenDetails(null); }}
+        onAddPig={handleAddPig}
+        onChanged={() => onRowAdded?.()}
+      />
 
       {/* Dialogs */}
       {addPigOpen && selectedPen && (
@@ -966,15 +671,6 @@ export default function PenLayout({ pens, pigs: initialPigs, rows, onPigSelect, 
         />
       )}
 
-      {removePigOpen && selectedPen && (
-        <RemovePigDialog
-          pen_name={selectedPen}
-          pen_id={selectedPenDetails?.id || ""}
-          pig={pigs.find(r => r.pen_name === selectedPen)}
-          onClose={handleCloseDialogs}
-          onRemovalSuccess={handleRemovalSuccess}
-        />
-      )}
 
       {/* Expand Row Capacity Dialog */}
       {expandCapacityOpen && (

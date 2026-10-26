@@ -1,7 +1,9 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect } from "react"
+import { useAppDispatch, useAppSelector } from "@/lib/redux/hooks"
+import { setTheme as setThemePreference } from "@/lib/redux/preferences/preferencesSlice"
 
 type Theme = "light" | "dark"
 
@@ -14,19 +16,8 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light")
-
-  useEffect(() => {
-    // Check for saved theme preference or default to light
-    const savedTheme = localStorage.getItem("pig_farm_theme") as Theme
-    if (savedTheme) {
-      setThemeState(savedTheme)
-    } else {
-      // Check system preference
-      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-      setThemeState(systemPrefersDark ? "dark" : "light")
-    }
-  }, [])
+  const theme = useAppSelector(state => state.preferences.theme)
+  const dispatch = useAppDispatch()
 
   useEffect(() => {
     // Apply theme to document
@@ -37,16 +28,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.remove("dark")
     }
 
-    // Save theme preference
-    localStorage.setItem("pig_farm_theme", theme)
   }, [theme])
 
   const toggleTheme = () => {
-    setThemeState((prev) => (prev === "light" ? "dark" : "light"))
+    dispatch(setThemePreference(theme === "light" ? "dark" : "light"))
   }
 
   const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme)
+    dispatch(setThemePreference(newTheme))
   }
 
   return <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>{children}</ThemeContext.Provider>
