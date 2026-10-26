@@ -19,6 +19,8 @@ interface SubscriptionContextType {
     ready: boolean
     /** Team members use the owner's plan and cannot manage billing. */
     isFarmOwner: boolean
+    /** Billing cycle of the active paid plan (null on trial / free). */
+    billingPeriod: "monthly" | "yearly" | null
     tier: SubscriptionTier
     limits: SubscriptionLimits
     isFeatureAvailable: (feature: string) => boolean
@@ -172,6 +174,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 trialDaysLeft,
                 subscriptionEndsAt: paidActive ? expiry : null,
                 isFarmOwner: data?.is_farm_owner !== false,
+                billingPeriod: paidActive ? data?.billing_period ?? "monthly" : null,
                 refreshSubscription: async () => { await refetch(); },
             }}
         >

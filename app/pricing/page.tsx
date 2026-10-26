@@ -126,10 +126,14 @@ function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; per
 }
 
 function PricingContent() {
-    const { tier, upgradeTo, isTrialActive } = useSubscription()
+    const { tier, upgradeTo, isTrialActive, billingPeriod } = useSubscription()
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
     const [showPayment, setShowPayment] = useState(false)
     const [period, setPeriod] = useState<Period>("monthly")
+    // Renewing customers see their current cycle first.
+    useEffect(() => {
+        if (billingPeriod) setPeriod(billingPeriod)
+    }, [billingPeriod])
     const [quotes, setQuotes] = useState<Record<string, Quote>>({})
 
     // Real KES prices for both billing periods, straight from the server.

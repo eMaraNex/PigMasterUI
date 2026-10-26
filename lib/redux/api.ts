@@ -70,6 +70,7 @@ export type SubscriptionData = {
   is_farm_owner?: boolean;
   has_active_subscription?: boolean;
   is_trial_active?: boolean;
+  billing_period?: "monthly" | "yearly" | null;
 };
 
 const baseQuery = fetchBaseQuery({

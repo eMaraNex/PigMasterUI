@@ -34,7 +34,7 @@ const initials = (name?: string) =>
 /** Plan / trial chip. Owners can click through to billing. */
 function PlanChip() {
     const router = useRouter();
-    const { ready, tier, isTrialActive, trialDaysLeft, isFarmOwner } = useSubscription();
+    const { ready, tier, isTrialActive, trialDaysLeft, isFarmOwner, billingPeriod, subscriptionEndsAt } = useSubscription();
     if (!ready) return <span className="hidden h-8 w-24 animate-pulse rounded-full bg-gray-100 dark:bg-gray-700 sm:inline-block" />;
 
     const label = isTrialActive ? `Trial · ${trialDaysLeft}d left` : `${tier.charAt(0).toUpperCase()}${tier.slice(1)}`;
@@ -51,7 +51,13 @@ function PlanChip() {
             disabled={!isFarmOwner}
             onClick={() => router.push("/settings?tab=billing")}
             className={`hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition enabled:hover:shadow-sm sm:inline-flex ${tone}`}
-            title={isFarmOwner ? "Manage plan" : "Plan of this farm"}
+            // The cycle and end date live in the tooltip and on Billing, keeping the header compact.
+            title={[
+                isTrialActive ? "Free trial" : `${tier.charAt(0).toUpperCase()}${tier.slice(1)} plan`,
+                billingPeriod && `billed ${billingPeriod}`,
+                subscriptionEndsAt && `until ${new Date(subscriptionEndsAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`,
+                isFarmOwner ? "click to manage" : null,
+            ].filter(Boolean).join(" · ")}
         >
             <Icon className="h-3.5 w-3.5" />
             {label}

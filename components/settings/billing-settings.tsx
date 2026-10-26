@@ -44,7 +44,7 @@ const maskPhone = (phone: string | null) => {
 /** Current plan, renewal date and M-Pesa payment history for the farm owner. */
 export default function BillingSettings() {
   const router = useRouter();
-  const { ready, tier, isTrialActive, trialDaysLeft, trialEndsAt, subscriptionEndsAt, isFarmOwner } = useSubscription();
+  const { ready, tier, isTrialActive, trialDaysLeft, trialEndsAt, subscriptionEndsAt, isFarmOwner, billingPeriod } = useSubscription();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -71,6 +71,7 @@ export default function BillingSettings() {
 
   const daysToRenewal = subscriptionEndsAt ? dayjs(subscriptionEndsAt).diff(dayjs(), "day") : null;
   const planName = isTrialActive ? "Free trial" : `${tier.charAt(0).toUpperCase()}${tier.slice(1)} plan`;
+  const cycle = billingPeriod === "yearly" ? "Billed yearly" : billingPeriod === "monthly" ? "Billed monthly" : null;
 
   return (
     <div className="space-y-6">
@@ -80,7 +81,10 @@ export default function BillingSettings() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="flex items-center gap-2 text-sm text-white/80"><Crown className="h-4 w-4" />Current plan</p>
-                <p className="mt-1 text-2xl font-bold">{planName}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-bold">
+                  {planName}
+                  {cycle && <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold">{cycle}</span>}
+                </p>
                 <p className="mt-1 text-sm text-white/85">
                   {isTrialActive && trialEndsAt && `${trialDaysLeft} days left · ends ${dayjs(trialEndsAt).format("D MMM YYYY")}`}
                   {!isTrialActive && subscriptionEndsAt && `Renews or expires on ${dayjs(subscriptionEndsAt).format("D MMM YYYY")}`}
@@ -93,6 +97,11 @@ export default function BillingSettings() {
             </div>
           )}
         </div>
+        {billingPeriod === "monthly" && (
+          <div className="border-t px-5 py-3 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
+            Tip: when you renew, choose <strong>Pay yearly</strong> to save 16% and cover 12 months with one M-Pesa payment.
+          </div>
+        )}
         {daysToRenewal !== null && daysToRenewal <= 7 && !isTrialActive && (
           <div className="flex items-center gap-2 border-t bg-amber-50 px-5 py-3 text-sm text-amber-900 dark:border-gray-700 dark:bg-amber-900/20 dark:text-amber-200">
             <CalendarClock className="h-4 w-4" />
