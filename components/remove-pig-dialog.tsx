@@ -8,16 +8,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Trash2, AlertTriangle } from "lucide-react";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useCurrency } from "@/lib/currency-context";
 import type { Pig as PigType, EarningsRecord, RemovePigDialogProps } from "@/types";
 import { reasons, saleTypes } from "@/lib/constants";
 import { useToast } from "@/lib/toast-provider";
+import { api } from "@/lib/redux/api";
+import { useAppDispatch } from "@/lib/redux/hooks";
 
 export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemovalSuccess }: RemovePigDialogProps) {
   const { user } = useAuth();
+  const dispatch = useAppDispatch();
   const { currency, getCurrencySymbol, getCurrencyRates } = useCurrency();
   const [formData, setFormData] = useState({
     reason: "",
@@ -49,11 +52,6 @@ export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemo
     setIsSubmitting(true);
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        showError('Error', "No authentication token found")
-      }
-
       // Create removal record - update pig removals table
       const removalRecord = {
         pig_id: pig.pig_id,
@@ -72,8 +70,8 @@ export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemo
         }),
       };
 
-      await axios.post(`${utils.apiUrl}/pigs/pig_removals/${user.farm_id}/${pig.pig_id}`, removalRecord, {
-        headers: { Authorization: `Bearer ${token}` },
+      await axios.delete(`${utils.apiUrl}/pigs/delete/${pig.id}`, { data: removalRecord,
+        
       });
 
       // If it's a sale, create earnings record
@@ -94,29 +92,22 @@ export default function RemovePigDialog({ pen_id, pen_name, pig, onClose, onRemo
           pen_id,
         };
 
-        await axios.post(`${utils.apiUrl}/earnings/${user.farm_id}`, earningsRecord, {
-          headers: { Authorization: `Bearer ${token}` },
+        await axios.post(`${utils.apiUrl}/earnings/create`, earningsRecord, {
+          
         });
       }
 
       // Fetch the latest removal history for the pen
-      const response = await axios.get(`${utils.apiUrl}/pens/${user.farm_id}/${pen_id ?? removalRecord?.pen_id}/history`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await axios.get(`${utils.apiUrl}/pen-history/list`, { params: { pen_id: pen_id ?? removalRecord?.pen_id, limit: 200 },
+        
       });
       const newRemovalRecords = response.data?.data || [];
       const newFilteredRecords = newRemovalRecords.filter((record: any) => record?.removed_at !== null);
-      localStorage.setItem("pig_farm_pig_removals", JSON.stringify(newFilteredRecords));
-
-      // Update local storage for pigs and pens
-      const cachedPigs = JSON.parse(localStorage.getItem(`pig_farm_pigs_${user.farm_id}`) || "[]") as PigType[];
-      const updatedPigs = cachedPigs.filter((r: PigType) => r.pig_id !== pig.pig_id);
-      localStorage.setItem(`pig_farm_pigs_${user.farm_id}`, JSON.stringify(updatedPigs));
-
-      const cachedPens = JSON.parse(localStorage.getItem(`pig_farm_pens_${user.farm_id}`) || "[]") as any[];
-      const updatedPens = cachedPens.map((h: any) =>
-        h.id === pen_id ? { ...h, isOccupied: false } : h
-      );
-      localStorage.setItem(`pig_farm_pens_${user.farm_id}`, JSON.stringify(updatedPens));
+      dispatch(api.util.invalidateTags([
+        { type: "Pig", id: user.farm_id },
+        { type: "Pens", id: user.farm_id },
+        { type: "Earnings", id: user.farm_id },
+      ]));
       showSuccess('Success', `Pig ${pig.pig_id} removed successfully!`)
       onRemovalSuccess?.(pig.pig_id || "");
       onClose();

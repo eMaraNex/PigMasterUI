@@ -1,25 +1,24 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
+import { Eye, Pencil, Trash2, Plus, Search, Filter, Heart, Calendar, TrendingUp, Users, Crown, PiggyBank } from "lucide-react"
+import { useRouter } from "next/navigation"
 import type { PigListProps, Pig as PigType } from "@/types";
 import EditPigDialog from "@/components/edit-pig-dialog";
 import AddPigletDialog from "@/components/add-piglet-dialog";
 import RemovePigDialog from "@/components/remove-pig-dialog";
 import { motion } from "framer-motion";
-import axios from "axios";
 import { useToast } from '@/lib/toast-provider';
-import * as utils from "@/lib/utils";
 import PigListSkeleton from "./skeletons/pigs-list/skeleton";
 import AddPigDialog from "@/components/add-pig-dialog";
 import Table from "./shared/table";
 import Pagination from "./shared/pagination";
-import { useAuth } from "@/lib/auth-context";
 import FilterDialog, { type FilterOptions } from "./filter-dialog";
+import { useGetPigDetailsQuery } from "@/lib/redux/api";
 
 interface PigStatistics {
   totalPigs: number
@@ -31,14 +30,12 @@ interface PigStatistics {
 }
 
 const PigList: React.FC<PigListProps> = ({ farmId }) => {
-  const { user } = useAuth();
+  const router = useRouter();
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [selectedPigs, setSelectedPigs] = useState<string[]>([]);
   const [editingPig, setEditingPig] = useState<PigType | null>(null);
   const [addPigletPig, setAddPigletPig] = useState<PigType | null>(null);
   const [removingPig, setRemovingPig] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number>(1);
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -57,8 +54,18 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
     breederBoarCount: 0,
     breedDistribution: {},
   })
-  const isMounted = useRef(true);
   const { showSuccess, showError } = useToast();
+  const farmQuery = useGetPigDetailsQuery({
+    farmId,
+    page,
+    limit: pageSize,
+    sortField,
+    sortOrder,
+    searchTerm: debouncedSearchTerm?.trim() || undefined,
+    filters,
+  }, { skip: !farmId });
+  const loading = farmQuery.isLoading;
+  const error = farmQuery.isError ? "Failed to load pig data." : null;
   const handleAddPig = () => {
     setAddPigOpen(true)
   };
@@ -70,52 +77,14 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const fetchPigs = useCallback(async () => {
-    if (!user?.farm_id) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      let token: string | null = null;
-      if (typeof window !== "undefined") {
-        token = localStorage.getItem("pig_farm_token");
-      }
-      if (!token) throw new Error("No authentication token found");
-
-
-      const response = await axios.post(
-        `${utils.apiUrl}/pigs/${user?.farm_id}/details`,
-        {
-          page: Number(page),
-          limit: Number(pageSize),
-          sortField,
-          sortOrder,
-          searchTerm: debouncedSearchTerm?.trim() || undefined,
-          filters
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      const { data, pagination, statistics: apiStatistics } = response.data.data;
-      setPigs(data || []);
-      setTotalItems(Number(pagination?.totalItems || 0));
-
-      // Update statistics from API response
-      if (apiStatistics) {
-        setStatistics(apiStatistics);
-      };
-    } catch (err) {
-      console.error("Error fetching pigs:", err);
-      setError("Failed to load pig data.");
-      showError("Error", "Failed to load pig data.");
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.farm_id, page, pageSize, sortField, sortOrder, debouncedSearchTerm, filters, showError]);
-
   useEffect(() => {
-    fetchPigs();
-  }, [fetchPigs]);
+    if (!farmQuery.data) return;
+    setPigs(farmQuery.data.data);
+    setTotalItems(Number(farmQuery.data.pagination?.totalItems || 0));
+    if (farmQuery.data.statistics) {
+      setStatistics(farmQuery.data.statistics);
+    }
+  }, [farmQuery.data]);
 
   useEffect(() => {
     if (debouncedSearchTerm !== searchTerm) return;
@@ -123,12 +92,6 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
       setPage(1);
     }
   }, [debouncedSearchTerm, searchTerm]);
-
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(Number(newPage));
@@ -180,8 +143,8 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
   }, [sortField, sortOrder]);
 
   const refetchPigs = useCallback(async () => {
-    await fetchPigs();
-  }, [fetchPigs]);
+    await farmQuery.refetch();
+  }, [farmQuery.refetch]);
 
   const handleApplyFilters = useCallback((newFilters: FilterOptions) => {
     setFilters(newFilters)
@@ -257,6 +220,12 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
   ]
 
   const tableActions = [
+    {
+      label: "Open profile",
+      icon: Eye,
+      onClick: (row: PigType) => row.id && router.push(`/pigs/${row.id}`),
+      className: "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300",
+    },
     {
       label: "Edit",
       icon: Pencil,
@@ -477,6 +446,7 @@ const PigList: React.FC<PigListProps> = ({ farmId }) => {
         sortOrder={sortOrder}
         onSort={handleSort}
         emptyState={emptyState}
+        onRowClick={(row: PigType) => row.id && router.push(`/pigs/${row.id}`)}
         className="rounded-3xl"
       />
 

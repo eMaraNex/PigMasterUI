@@ -1,878 +1,470 @@
 "use client"
 
+import { useCallback, useEffect, useMemo, useState } from "react"
+import dayjs from "dayjs"
+import { CheckCircle2, ChevronLeft, ChevronRight, Info, Loader2, Package, Plus, Save, Wheat } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Utensils, Clock, Plus } from "lucide-react"
-import axios from "axios"
-import { useAuth } from "@/lib/auth-context"
-import * as utils from "@/lib/utils"
-import { useToast } from "@/lib/toast-provider"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useState, useEffect } from "react"
-import type { FeedingScheduleProps, Pig } from "@/types"
-import { penNamesConversion } from "@/lib/utils"
+import { apiRequest } from "@/lib/api/client"
+import { useToast } from "@/lib/toast-provider"
+import { useCurrency } from "@/lib/currency-context"
+import type { FeedingScheduleProps } from "@/types"
+import { DateRangePicker, presetRange, rangeToParams, type DateRange } from "@/components/shared/date-range-picker"
+import { ExportMenu } from "@/components/shared/export-menu"
+import { usePermissions } from "@/lib/permissions"
 
-export default function FeedingSchedule({ pigs, pens }: FeedingScheduleProps) {
-  const { user } = useAuth()
+type GuideEntry = { label: string; feed_type: string; kg_per_day: number }
+type PlanPen = {
+  pen_id: string
+  pen_name: string
+  row_name: string | null
+  pigs: number
+  stages: Record<string, number>
+  feed_type: string
+  suggested_kg: number
+  fed_today_kg: number
+}
+type Plan = { guide: Record<string, GuideEntry>; feed_types: string[]; pens: PlanPen[] }
+type Summary = {
+  currency: string
+  total_kg: number
+  estimated_cost: number
+  kg_per_pig_per_day: number
+  by_feed_type: { feed_type: string; kg: number }[]
+  stock: { feed_type: string; bought_kg: number; used_kg: number; on_hand_kg: number; cost_per_kg: number | null }[]
+}
+type Row = { selected: boolean; feed_type: string; amount: string }
+type Tab = "today" | "history" | "store"
+
+const UNITS: Record<string, string> = { bag_70kg: "70 kg bags", bag_50kg: "50 kg bags", bag_25kg: "25 kg bags", kg: "kg", tonne: "tonnes" }
+const PAGE_SIZE = 20
+
+export default function FeedingSchedule(_props: FeedingScheduleProps) {
   const { showSuccess, showError } = useToast()
-  const [addOpen, setAddOpen] = useState(false)
-  const [localPigs, setLocalPigs] = useState<Pig[]>(pigs || [])
-  const [periodRecords, setPeriodRecords] = useState<any[]>([])
-  const [dailyRecords, setDailyRecords] = useState<any[]>([])
-  const [visibleDailyEntries, setVisibleDailyEntries] = useState(6)
-  const [visiblePeriodEntries, setVisiblePeriodEntries] = useState(4)
+  const { formatAmount: formatBase, convertToBaseCurrency } = useCurrency()
+  const [tab, setTab] = useState<Tab>("today")
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [summary, setSummary] = useState<Summary | null>(null)
+  // Feed prices are entered in the farm's currency; convert into the user's display currency.
+  const formatAmount = (amount: number) => formatBase(convertToBaseCurrency(amount, (summary?.currency ?? "KES") as never))
+  const [rows, setRows] = useState<Record<string, Row>>({})
+  const [loadingPlan, setLoadingPlan] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
 
-  useEffect(() => {
-    setLocalPigs(pigs || [])
-  }, [pigs])
-
-  useEffect(() => {
-    if (user?.farm_id) {
-      axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
-        .then(resp => setPeriodRecords(resp.data.data || []))
-        .catch(err => console.error('Error fetching period records:', err))
-    }
-  }, [user?.farm_id])
-
-  useEffect(() => {
-    if (user?.farm_id) {
-      axios.get(`${utils.apiUrl}/feeding/record/farm/${user.farm_id}?record_type=daily`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
-        .then(resp => setDailyRecords(resp.data.data || []))
-        .catch(err => console.error('Error fetching daily records:', err))
-    }
-  }, [user?.farm_id])
-
-  const [recordType, setRecordType] = useState<'daily' | 'weekly' | 'monthly'>('daily')
-
-  const [dailyForm, setDailyForm] = useState({
-    pig_id: '',
-    pen_id: '',
-    feed_type: 'pellets',
-    amount: '',
-    unit: 'grams',
-    feeding_time: new Date().toISOString(),
-    notes: ''
-  })
-
-  const [weeklyForm, setWeeklyForm] = useState({
-    pen_id: '',
-    feed_type: 'pellets',
-    total_amount: '',
-    unit: 'kg',
-    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
-    notes: ''
-  })
-
-  const [monthlyForm, setMonthlyForm] = useState({
-    pen_id: '',
-    feed_type: 'pellets',
-    total_amount: '',
-    unit: 'kg',
-    start_date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
-    notes: ''
-  })
-
-  const safePigs = localPigs || []
-
-  const getPigsInPen = (penId: string) => safePigs.filter(p => p.pen_id === penId)
-
-  const getCurrentFeedingStatus = (pig: Pig) => {
-    if (!pig?.feedingSchedule?.lastFed) return "overdue"
-    const now = new Date()
-    const lastFed = new Date(pig.feedingSchedule.lastFed)
-    const hoursSinceLastFed = (now.getTime() - lastFed.getTime()) / (1000 * 60 * 60)
-    if (hoursSinceLastFed > 24) return "overdue"
-    if (hoursSinceLastFed > 12) return "due"
-    return "fed"
-  }
-
-  const pigsWithIndividualFeeding = safePigs.filter(pig => pig?.feedingSchedule?.lastFed)
-  const overduePigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "overdue")
-  const duePigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "due")
-  const fedPigs = pigsWithIndividualFeeding.filter(r => getCurrentFeedingStatus(r) === "fed")
-
-  const getTotalDailyFeed = () =>
-    safePigs.reduce((total, pig) => {
-      const dailyAmount = pig?.feedingSchedule?.dailyAmount || "0g"
-      const amount = Number.parseFloat(dailyAmount.replace(/[^\d.]/g, ""))
-      return total + (isNaN(amount) ? 0 : amount)
-    }, 0)
-
-  
-  const toKg = (amount: number, unit: string) => {
-    if (unit === 'grams') return amount / 1000
-    if (unit === 'kg') return amount
-    return amount // treat liters as kg-equivalent for display
-  }
-
-  const getDailySumInPeriod = (startDate: string, endDate: string, targetPenId: string | null) => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    end.setDate(end.getDate() + 1)
-
-    const filtered = dailyRecords.filter((r: any) => {
-      const ft = new Date(r.feeding_time)
-      if (ft < start || ft >= end) return false
-
-      let recordPen = r.pen_id ?? null
-      if (!recordPen && r.pig_id) {
-        const pig = localPigs.find((p: Pig) => p.pig_id === r.pig_id)
-        recordPen = pig ? pig.pen_id ?? null : null
-      }
-
-      return targetPenId === null ? true : recordPen === targetPenId
-    })
-
-    const sum: { total: number; feed_types: Record<string, number> } = { total: 0, feed_types: {} }
-    filtered.forEach((r: any) => {
-      const feedType = r.feed_type || 'Unknown'
-      const amountInKg = toKg(parseFloat(String(r.amount ?? 0)), r.unit || 'kg')
-      sum.feed_types[feedType] = (sum.feed_types[feedType] || 0) + amountInKg
-      sum.total += amountInKg
-    })
-    return sum
-  }
-
-
-  const aggregateDailyRecords = (records: any[]) =>
-    records.reduce((acc, r) => {
-      const date = new Date(r.feeding_time).toISOString().split('T')[0]
-      if (!acc[date]) acc[date] = { date, feed_types: {}, total: 0 }
-      const feedType = r.feed_type || 'Unknown'
-      const amountInKg = toKg(parseFloat(String(r.amount ?? 0)), r.unit || 'kg')
-      acc[date].feed_types[feedType] = (acc[date].feed_types[feedType] || 0) + amountInKg
-      acc[date].total += amountInKg
-      return acc
-    }, {} as Record<string, any>)
-
-
-  const aggregatePeriodRecords = (records: any[]) => {
-    const acc: Record<string, any> = {}
-    records.forEach(r => {
-      const pen_id = r.pen_id || null
-      const key = `${r.start_date}-${r.end_date}-${pen_id ?? 'farm'}`
-      if (!acc[key]) {
-        acc[key] = {
-          start: r.start_date,
-          end: r.end_date,
-          pen_id,
-          pigs_count: r.pigs_count ?? (pen_id ? getPigsInPen(pen_id).length : safePigs.length),
-          feed_types: {},
-          total: 0
-        }
-      }
-      const feedType = r.feed_type || 'Unknown'
-     
-      const amount = parseFloat(r.total_amount || 0)
-      acc[key].feed_types[feedType] = (acc[key].feed_types[feedType] || 0) + amount
-      acc[key].total += amount
-    })
-
-   
-    Object.values(acc).forEach((entry: any) => {
-      const dailySum = getDailySumInPeriod(entry.start, entry.end, entry.pen_id)
-      Object.entries(dailySum.feed_types).forEach(([ft, amt]: any) => {
-        entry.feed_types[ft] = (entry.feed_types[ft] || 0) + amt
-      })
-      entry.total += dailySum.total
-    })
-
-    return acc
-  }
-
-  const dailyAggregates = aggregateDailyRecords(dailyRecords)
-  const weeklyAggregates = aggregatePeriodRecords(periodRecords.filter((r: any) => r.record_type === 'weekly'))
-  const monthlyAggregates = aggregatePeriodRecords(periodRecords.filter((r: any) => r.record_type === 'monthly'))
-
-  const sortedDaily = Object.values(dailyAggregates).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  const sortedWeekly = Object.values(weeklyAggregates).sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime())
-  const sortedMonthly = Object.values(monthlyAggregates).sort((a: any, b: any) => new Date(b.start).getTime() - new Date(a.start).getTime())
-  const visibleDailySummary = sortedDaily.slice(0, visibleDailyEntries)
-  const visibleWeeklySummary = sortedWeekly.slice(0, visiblePeriodEntries)
-  const visibleMonthlySummary = sortedMonthly.slice(0, visiblePeriodEntries)
-
-  const refreshDailyRecords = () =>
-    axios.get(`${utils.apiUrl}/feeding/record/farm/${user!.farm_id}?record_type=daily`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-    }).then(resp => setDailyRecords(resp.data.data || []))
-
-  const refreshPeriodRecords = () =>
-    axios.get(`${utils.apiUrl}/feeding/record/period/farm/${user!.farm_id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-    }).then(resp => setPeriodRecords(resp.data.data || []))
-
-  const handleDailySubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
-    if (!dailyForm.pig_id && !dailyForm.pen_id) {
-      showError('Error', 'Please select either a pig or pen'); return
-    }
-    if (dailyForm.pen_id) {
-      const numPigs = getPigsInPen(dailyForm.pen_id).length
-      if (numPigs === 0) { showError('Error', 'Cannot record feeding for a pen with no pigs'); return }
-    }
+  const loadPlan = useCallback(async () => {
+    setLoadingPlan(true)
     try {
-      const payload = {
-        ...dailyForm,
-        farm_id: user.farm_id,
-        pig_id: dailyForm.pig_id || null,
-        pen_id: dailyForm.pen_id || null
-      }
-      const resp = await axios.post(`${utils.apiUrl}/feeding/record/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
-      const added = resp?.data?.data ?? resp?.data
-      if (added?.feeding_time) {
-        if (added?.pig_id) {
-          setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pig_id === added.pig_id
-            ? {
-                ...p,
-                feedingSchedule: {
-                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
-                  feedType: p.feedingSchedule?.feedType ?? '',
-                  times: p.feedingSchedule?.times ?? [],
-                  lastFed: added.feeding_time,
-                  specialDiet: p.feedingSchedule?.specialDiet,
-                },
-              }
-            : p))
-        } else if (added?.pen_id) {
-          setLocalPigs((prev: Pig[]) => prev.map((p: Pig) => p.pen_id === added.pen_id
-            ? {
-                ...p,
-                feedingSchedule: {
-                  dailyAmount: p.feedingSchedule?.dailyAmount ?? '',
-                  feedType: p.feedingSchedule?.feedType ?? '',
-                  times: p.feedingSchedule?.times ?? [],
-                  lastFed: added.feeding_time,
-                  specialDiet: p.feedingSchedule?.specialDiet,
-                },
-              }
-            : p))
-        }
-      }
-      showSuccess('Success', 'Daily feeding recorded')
-      setAddOpen(false)
-      setDailyForm({ pig_id: '', pen_id: '', feed_type: 'pellets', amount: '', unit: 'grams', feeding_time: new Date().toISOString(), notes: '' })
-      refreshDailyRecords()
+      const [planResponse, summaryResponse] = await Promise.all([
+        apiRequest.get("/feeding-records/plan"),
+        apiRequest.get("/feeding-records/summary"),
+      ])
+      const nextPlan: Plan = planResponse.data.data
+      setPlan(nextPlan)
+      setSummary(summaryResponse.data.data)
+      setRows(Object.fromEntries(nextPlan.pens.map(pen => [pen.pen_id, {
+        // Pens already fed today start unticked so a second round is a deliberate choice.
+        selected: pen.fed_today_kg === 0,
+        feed_type: pen.feed_type,
+        amount: String(Math.max(0, Math.round((pen.suggested_kg - pen.fed_today_kg) * 10) / 10)),
+      }])))
     } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message)
+      showError("Error", err?.response?.data?.message || "Could not load the feeding plan")
+    } finally {
+      setLoadingPlan(false)
     }
-  }
+  }, [])
 
-  const handleWeeklySubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
-    if (!weeklyForm.pen_id) { showError('Error', 'Please select a pen'); return }
-    const numPigs = getPigsInPen(weeklyForm.pen_id).length
-    if (numPigs === 0) { showError('Error', 'Cannot record feeding for a pen with no pigs'); return }
+  useEffect(() => { loadPlan() }, [loadPlan])
+
+  const selected = useMemo(() => (plan?.pens ?? []).filter(pen => rows[pen.pen_id]?.selected && Number(rows[pen.pen_id]?.amount) > 0), [plan, rows])
+  const selectedKg = selected.reduce((sum, pen) => sum + Number(rows[pen.pen_id].amount), 0)
+  const suggestedToday = (plan?.pens ?? []).reduce((sum, pen) => sum + pen.suggested_kg, 0)
+  const fedToday = (plan?.pens ?? []).reduce((sum, pen) => sum + pen.fed_today_kg, 0)
+  const onHand = (summary?.stock ?? []).reduce((sum, item) => sum + Math.max(0, item.on_hand_kg), 0)
+  const daysOfStock = suggestedToday > 0 ? Math.floor(onHand / suggestedToday) : null
+
+  const updateRow = (penId: string, patch: Partial<Row>) => setRows(prev => ({ ...prev, [penId]: { ...prev[penId], ...patch } }))
+  const setAll = (value: boolean) => setRows(prev => Object.fromEntries(Object.entries(prev).map(([id, row]) => [id, { ...row, selected: value }])))
+
+  const saveRound = async () => {
+    if (!selected.length) return
+    setSaving(true)
     try {
-      const payload = {
-        ...weeklyForm,
-        farm_id: user.farm_id,
-        record_type: 'weekly',
-        // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
-      }
-      await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
+      const response = await apiRequest.post("/feeding-records/round", {
+        entries: selected.map(pen => ({ pen_id: pen.pen_id, feed_type: rows[pen.pen_id].feed_type, amount_kg: Number(rows[pen.pen_id].amount) })),
       })
-      showSuccess('Success', `Weekly feeding recorded (${weeklyForm.start_date} to ${weeklyForm.end_date})`)
-      setAddOpen(false)
-      setWeeklyForm({ pen_id: '', feed_type: 'pellets', total_amount: '', unit: 'kg', start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], notes: '' })
-      refreshPeriodRecords()
+      showSuccess("Saved", `Feeding recorded for ${response.data.data.created} pens (${Math.round(selectedKg * 10) / 10} kg)`)
+      await loadPlan()
     } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message)
+      showError("Error", err?.response?.data?.message || err?.message)
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleMonthlySubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user?.farm_id) { showError('Error', 'Missing farm info'); return }
-    if (!monthlyForm.pen_id) { showError('Error', 'Please select a pen'); return }
-    const numPigs = getPigsInPen(monthlyForm.pen_id).length
-    if (numPigs === 0) { showError('Error', 'Cannot record feeding for a pen with no pigs'); return }
-    try {
-      const payload = {
-        ...monthlyForm,
-        farm_id: user.farm_id,
-        record_type: 'monthly',
-        // pigs_count: numPigs   // ← send pig count to backend for historical accuracy
-      }
-      await axios.post(`${utils.apiUrl}/feeding/record/period/${user.farm_id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('pig_farm_token')}` }
-      })
-      showSuccess('Success', `Monthly feeding recorded (${monthlyForm.start_date} to ${monthlyForm.end_date})`)
-      setAddOpen(false)
-      setMonthlyForm({ pen_id: '', feed_type: 'pellets', total_amount: '', unit: 'kg', start_date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], notes: '' })
-      refreshPeriodRecords()
-    } catch (err: any) {
-      showError('Error', err?.response?.data?.message || err?.message)
-    }
-  }
+  const stageText = (stages: Record<string, number>) =>
+    Object.entries(stages).map(([stage, count]) => `${count} ${(plan?.guide[stage]?.label ?? stage).split(" (")[0].toLowerCase()}`).join(", ")
 
-  const sortedDailyRecords = [...dailyRecords].sort((a: any, b: any) =>
-    new Date(b.feeding_time).getTime() - new Date(a.feeding_time).getTime())
-
- 
-  const PenSelector = ({
-    penId,
-    onChange,
-    label = "Select Pen"
-  }: { penId: string; onChange: (v: string) => void; label?: string }) => {
-    const count = penId ? getPigsInPen(penId).length : null
-    return (
-      <div>
-        <label className="text-xs font-medium">{label}</label>
-        <Select value={penId} onValueChange={onChange}>
-          <SelectTrigger className="w-full"><SelectValue placeholder="Select pen" /></SelectTrigger>
-          <SelectContent>
-            {pens?.map(pen => <SelectItem key={pen.id} value={pen.id}>{pen.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {penId && (
-          <p className={`text-xs mt-1 ${count === 0 ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
-            {count === 0
-              ? '⚠ This pen has no pigs — feeding cannot be recorded'
-              : `This pen has ${count} pig${count === 1 ? '' : 's'}`}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  const renderPeriodRow = (period: any, index: number) => {
-    const start = new Date(period.start)
-    const end = new Date(period.end)
-    const numDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-    const numPigs = period.pigs_count > 0 ? period.pigs_count : 1
-    const avgPerPigPerDay = numPigs > 0 && numDays > 0 ? (period.total / numDays / numPigs).toFixed(3) : 'N/A'
-
-    return (
-      <div key={index} className="p-2 bg-gray-50 dark:bg-gray-700 rounded space-y-1">
-        <div className="flex flex-wrap justify-between gap-1 font-medium text-sm">
-          <span>
-            {start.toLocaleDateString()} – {end.toLocaleDateString()}
-            {period.pen_id ? ` (Pen: ${penNamesConversion(pens, period.pen_id)})` : ' (Farm)'}
-          </span>
-          <span>
-            {period.total.toFixed(2)} kg
-            {numPigs > 0 && ` · ${avgPerPigPerDay} kg/pig/day`}
-          </span>
-        </div>
-        {Object.entries(period.feed_types).map(([feedType, amt]: any) => (
-          <div key={feedType} className="flex justify-between text-xs text-gray-600 dark:text-gray-400 pl-2">
-            <span>{feedType}</span>
-            <span>{amt.toFixed(2)} kg</span>
-          </div>
+  return (
+    <div className="space-y-4 p-2 sm:space-y-6 sm:p-0">
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: "Fed today", value: `${Math.round(fedToday)} kg`, hint: `of ~${Math.round(suggestedToday)} kg suggested`, tone: "text-emerald-600" },
+          { label: "Feed used (30 days)", value: `${(summary?.total_kg ?? 0).toLocaleString()} kg`, hint: `${summary?.kg_per_pig_per_day ?? 0} kg/pig/day`, tone: "text-amber-600" },
+          { label: "Feed cost (30 days)", value: formatAmount(summary?.estimated_cost ?? 0), hint: "From purchase prices", tone: "text-blue-600" },
+          { label: "Feed in store", value: `${Math.round(onHand).toLocaleString()} kg`, hint: daysOfStock === null ? "Record purchases to track stock" : `About ${daysOfStock} days left`, tone: daysOfStock !== null && daysOfStock < 7 ? "text-red-600" : "text-violet-600" },
+        ].map(card => (
+          <Card key={card.label} className="bg-white/70 dark:bg-gray-800/70">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{card.label}</p>
+              <p className={`mt-2 text-xl font-bold sm:text-2xl ${card.tone}`}>{card.value}</p>
+              <p className="text-xs text-gray-500">{card.hint}</p>
+            </CardContent>
+          </Card>
         ))}
       </div>
-    )
+
+      <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-gray-700 sm:w-fit">
+        {([["today", "Today's feeding"], ["history", "History"], ["store", "Feed store"]] as [Tab, string][]).map(([value, label]) => (
+          <button key={value} onClick={() => setTab(value)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium sm:flex-none ${tab === value ? "bg-white shadow dark:bg-gray-900" : "text-gray-600 dark:text-gray-300"}`}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "today" && (
+        <Card className="bg-white/70 dark:bg-gray-800/70">
+          <CardHeader className="space-y-2 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base"><Wheat className="h-5 w-5 text-amber-600" />Feeding round · {dayjs().format("ddd D MMM")}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setShowGuide(v => !v)}><Info className="mr-1 h-4 w-4" />Ration guide</Button>
+                <Button onClick={saveRound} disabled={saving || !selected.length} className="hidden bg-gradient-to-r from-green-500 to-emerald-600 text-white md:inline-flex">
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save {selected.length} pens · {Math.round(selectedKg * 10) / 10} kg
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">Amounts are suggested from each pen&apos;s pigs and their stage. Adjust them to what you actually gave, then save once for the whole round.</p>
+            {showGuide && plan && (
+              <div className="overflow-x-auto rounded-lg border bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-900">
+                <table className="w-full">
+                  <thead><tr className="text-left text-gray-500"><th className="pb-1">Stage</th><th className="pb-1">Feed</th><th className="pb-1">kg / pig / day</th></tr></thead>
+                  <tbody>{Object.entries(plan.guide).map(([stage, entry]) => (
+                    <tr key={stage}><td className="py-0.5">{entry.label}</td><td>{entry.feed_type}</td><td>{entry.kg_per_day}</td></tr>
+                  ))}</tbody>
+                </table>
+                <p className="mt-2 text-gray-500">Starting points from common East African practice. Confirm with your feed supplier or nutritionist and adjust to body condition.</p>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent>
+            {loadingPlan ? <div className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></div>
+              : !plan?.pens.length ? <p className="py-10 text-center text-sm text-gray-500">No pens have pigs yet. Add pigs to pens to start recording feeding.</p> : (
+              <>
+              {/* Phones: one card per pen so feed and kg stay on screen */}
+              <div className="space-y-2 md:hidden">
+                <label className="flex items-center gap-2 px-1 text-xs text-gray-600 dark:text-gray-300">
+                  <input type="checkbox" checked={selected.length === plan.pens.length} onChange={e => setAll(e.target.checked)} />
+                  Select all {plan.pens.length} pens
+                </label>
+                {plan.pens.map(pen => {
+                  const row = rows[pen.pen_id]
+                  if (!row) return null
+                  return (
+                    <div key={pen.pen_id} className={`rounded-xl border p-3 dark:border-gray-700 ${row.selected ? "border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10" : "bg-white/60 dark:bg-gray-900/40"}`}>
+                      <label className="flex items-start gap-3">
+                        <input type="checkbox" className="mt-1 h-4 w-4" aria-label={`Feed ${pen.pen_name}`} checked={row.selected} onChange={e => updateRow(pen.pen_id, { selected: e.target.checked })} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium">{pen.pen_name}</span>
+                          <span className="block text-xs text-gray-500">{pen.pigs} pig{pen.pigs === 1 ? "" : "s"} · {stageText(pen.stages)}</span>
+                          {pen.fed_today_kg > 0 && <Badge variant="outline" className="mt-1 text-[10px] text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{pen.fed_today_kg} kg given today</Badge>}
+                        </span>
+                      </label>
+                      <div className="mt-2 flex items-end gap-2">
+                        <select value={row.feed_type} onChange={e => updateRow(pen.pen_id, { feed_type: e.target.value })}
+                          className="h-10 min-w-0 flex-1 rounded-md border bg-white px-2 text-sm dark:bg-gray-900" aria-label={`Feed for ${pen.pen_name}`}>
+                          {[...new Set([row.feed_type, ...plan.feed_types])].map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                        <div className="w-24 shrink-0">
+                          <Input type="number" inputMode="decimal" min={0} step="0.1" value={row.amount} onChange={e => updateRow(pen.pen_id, { amount: e.target.value, selected: true })}
+                            className="h-10" aria-label={`Kg for ${pen.pen_name}`} />
+                          <div className="mt-0.5 text-right text-[10px] text-gray-500">kg · suggested {pen.suggested_kg}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-lg border md:block dark:border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900">
+                    <tr>
+                      <th className="w-10 px-3 py-2"><input type="checkbox" aria-label="Select all pens" checked={selected.length === plan.pens.length} onChange={e => setAll(e.target.checked)} /></th>
+                      <th className="px-3 py-2">Pen</th>
+                      <th className="hidden px-3 py-2 md:table-cell">Pigs</th>
+                      <th className="px-3 py-2">Feed</th>
+                      <th className="px-3 py-2">kg</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.pens.map(pen => {
+                      const row = rows[pen.pen_id]
+                      if (!row) return null
+                      return (
+                        <tr key={pen.pen_id} className="border-t dark:border-gray-700">
+                          <td className="px-3 py-2"><input type="checkbox" aria-label={`Feed ${pen.pen_name}`} checked={row.selected} onChange={e => updateRow(pen.pen_id, { selected: e.target.checked })} /></td>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{pen.pen_name}</div>
+                            {pen.fed_today_kg > 0 && <Badge variant="outline" className="mt-0.5 text-[10px] text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{pen.fed_today_kg} kg given today</Badge>}
+                          </td>
+                          <td className="hidden px-3 py-2 text-xs text-gray-600 md:table-cell dark:text-gray-400">{pen.pigs} · {stageText(pen.stages)}</td>
+                          <td className="px-3 py-2">
+                            <select value={row.feed_type} onChange={e => updateRow(pen.pen_id, { feed_type: e.target.value })}
+                              className="h-8 w-full min-w-36 rounded-md border bg-white px-2 text-xs dark:bg-gray-900" aria-label={`Feed for ${pen.pen_name}`}>
+                              {[...new Set([row.feed_type, ...plan.feed_types])].map(type => <option key={type} value={type}>{type}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input type="number" min={0} step="0.1" value={row.amount} onChange={e => updateRow(pen.pen_id, { amount: e.target.value, selected: true })}
+                              className="h-8 w-20" aria-label={`Kg for ${pen.pen_name}`} />
+                            <div className="text-[10px] text-gray-500">suggested {pen.suggested_kg}</div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Phones: keep the save button in reach while scrolling a long list of pens */}
+              <div className="sticky bottom-3 z-10 mt-3 md:hidden">
+                <Button onClick={saveRound} disabled={saving || !selected.length} className="h-12 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg">
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save {selected.length} pens · {Math.round(selectedKg * 10) / 10} kg
+                </Button>
+              </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === "history" && <FeedingHistory />}
+      {tab === "store" && <FeedStore summary={summary} feedTypes={plan?.feed_types ?? []} onChange={loadPlan} formatAmount={formatAmount} />}
+    </div>
+  )
+}
+
+function FeedingHistory() {
+  const { showError } = useToast()
+  const [page, setPage] = useState(1)
+  const [range, setRange] = useState<DateRange>(() => presetRange("last_30_days"))
+  const { can } = usePermissions()
+  const { from, to } = rangeToParams(range)
+  const filter = [
+    ...(from ? [{ field: "feeding_time", operator: "gte", value: from }] : []),
+    ...(to ? [{ field: "feeding_time", operator: "lte", value: to }] : []),
+  ]
+  const [records, setRecords] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    apiRequest.post("/feeding-records/list", {
+      page, limit: PAGE_SIZE, sort: [{ field: "feeding_time", order: "DESC" }],
+      filter,
+    })
+      .then(response => { setRecords(response.data.data); setTotal(response.data.total) })
+      .catch(err => showError("Error", err?.response?.data?.message || "Could not load feeding history"))
+      .finally(() => setLoading(false))
+  }, [page, from, to])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  return (
+    <Card className="bg-white/70 dark:bg-gray-800/70">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
+        <CardTitle className="text-base">Feeding history</CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker value={range} onChange={next => { setRange(next); setPage(1) }} allowAll />
+          {can("feeding_records", "export") && (
+            <ExportMenu
+              path="/feeding-records/export"
+              filename="feeding-records"
+              params={{ filter, sort: [{ field: "feeding_time", order: "DESC" }] }}
+            />
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-lg border dark:border-gray-700">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900">
+              <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">Pen / pig</th><th className="px-3 py-2">Feed</th><th className="px-3 py-2">Amount</th><th className="hidden px-3 py-2 md:table-cell">Pigs</th></tr>
+            </thead>
+            <tbody>
+              {loading && records.length === 0 && <tr><td colSpan={5} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></td></tr>}
+              {!loading && records.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-gray-500">No feeding recorded in this period.</td></tr>}
+              {records.map(record => (
+                <tr key={record.id} className="border-t dark:border-gray-700">
+                  <td className="whitespace-nowrap px-3 py-2">{dayjs(record.feeding_time).format("D MMM, HH:mm")}</td>
+                  <td className="px-3 py-2">{record.pen_name ?? record.pig_id ?? "—"}</td>
+                  <td className="px-3 py-2">{record.feed_type}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{record.record_type === "daily" ? `${record.amount} ${record.unit}` : `${record.total_amount} ${record.unit} (${record.record_type})`}</td>
+                  <td className="hidden px-3 py-2 md:table-cell">{record.pigs_count ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <span>{total.toLocaleString()} records</span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></Button>
+            <span className="px-2">Page {page} of {totalPages}</span>
+            <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+const emptyPurchase = { feed_type: "Sow & weaner meal", brand: "", quantity: "", unit: "bag_70kg", cost_per_unit: "", purchase_date: dayjs().format("YYYY-MM-DD"), supplier: "" }
+
+function FeedStore({ summary, feedTypes, onChange, formatAmount }: { summary: Summary | null; feedTypes: string[]; onChange: () => void; formatAmount: (n: number) => string }) {
+  const { showSuccess, showError } = useToast()
+  const [purchases, setPurchases] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(emptyPurchase)
+  const [saving, setSaving] = useState(false)
+
+  const loadPurchases = () =>
+    apiRequest.get("/feed-stock/list", { params: { limit: 20, sort: "-purchase_date" } })
+      .then(response => setPurchases(response.data.data))
+      .catch(() => setPurchases([]))
+
+  useEffect(() => { loadPurchases() }, [])
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await apiRequest.post("/feed-stock/create", {
+        ...form,
+        quantity: Number(form.quantity),
+        cost_per_unit: form.cost_per_unit ? Number(form.cost_per_unit) : null,
+      })
+      showSuccess("Saved", "Feed purchase recorded")
+      setOpen(false)
+      setForm(emptyPurchase)
+      loadPurchases()
+      onChange()
+    } catch (err: any) {
+      showError("Error", err?.response?.data?.message || err?.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-red-600 dark:text-red-400">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-red-600 to-red-700 dark:from-red-400 dark:to-red-500 bg-clip-text text-transparent">{overduePigs.length}</div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Not fed in 24+ hours</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-amber-600 dark:text-amber-400">Due Soon</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">{duePigs.length}</div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Due for feeding</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-green-600 dark:text-green-400">Recently Fed</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-green-600 to-green-700 dark:from-green-400 dark:to-green-500 bg-clip-text text-transparent">{fedPigs.length}</div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Fed today</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1">
-          <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg text-gray-900 dark:text-gray-100">Daily Feed Total</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">{getTotalDailyFeed().toFixed(1)}g</div>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total daily requirement</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Today's schedule */}
-      <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-900/30 dark:to-blue-800/30 border-b border-gray-200 dark:border-gray-600 pb-3 sm:pb-4">
-          <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
-            <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-            <span className="text-gray-900 dark:text-gray-100">Today's Feeding Schedule</span>
-          </CardTitle>
+    <div className="space-y-4">
+      <Card className="bg-white/70 dark:bg-gray-800/70">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Package className="h-5 w-5 text-violet-600" />Stock on hand</CardTitle>
+          <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Record purchase</Button>
         </CardHeader>
-        <CardContent className="bg-gradient-to-br from-white/80 to-gray-50/80 dark:from-gray-800/80 dark:to-gray-900/80 p-3 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mt-3 sm:mt-5">
-            {["Morning (6:00 AM)", "Afternoon (2:00 PM)", "Evening (6:00 PM)"].map((timeSlot, index) => (
-              <div key={timeSlot} className="space-y-3">
-                <h4 className="font-medium text-base sm:text-lg text-gray-900 dark:text-gray-100">{timeSlot}</h4>
-                <div className="space-y-2">
-                  {safePigs.filter(pig => {
-                    const times = pig?.feedingSchedule?.times || []
-                    return times.some((time: string) => {
-                      if (index === 0) return time.includes("6:00") && time.includes("AM")
-                      if (index === 1) return time.includes("2:00") && time.includes("PM")
-                      return time.includes("6:00") && time.includes("PM")
-                    })
-                  }).map(pig => {
-                    const status = getCurrentFeedingStatus(pig)
-                    const dailyAmount = pig?.feedingSchedule?.dailyAmount || "N/A"
-                    return (
-                      <div key={pig?.id} className="flex items-center justify-between p-2 sm:p-3 border border-gray-200 dark:border-gray-600 rounded bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-xs sm:text-sm text-gray-900 dark:text-gray-100 truncate">{pig?.name}</p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{pig?.pen_id} • {dailyAmount}</p>
-                        </div>
-                        <Badge variant={status === "overdue" ? "destructive" : status === "due" ? "secondary" : "default"}
-                          className={`ml-2 flex-shrink-0 text-xs whitespace-nowrap ${status === "fed" ? "bg-gradient-to-r from-green-500 to-green-600 text-white" : status === "overdue" ? "bg-gradient-to-r from-red-500 to-red-600" : "bg-gradient-to-r from-amber-500 to-amber-600 text-white"}`}>
-                          {status === "overdue" ? "Overdue" : status === "due" ? "Due" : "Fed"}
-                        </Badge>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+        <CardContent>
+          {!summary?.stock.length ? <p className="text-sm text-gray-500">Record feed purchases to track stock and cost per kg.</p> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs uppercase text-gray-500"><th className="pb-2">Feed</th><th className="pb-2">Bought</th><th className="pb-2">Used</th><th className="pb-2">On hand</th><th className="pb-2">Cost / kg</th></tr></thead>
+                <tbody>{summary.stock.map(item => (
+                  <tr key={item.feed_type} className="border-t dark:border-gray-700">
+                    <td className="py-2 font-medium">{item.feed_type}</td>
+                    <td>{item.bought_kg.toLocaleString()} kg</td>
+                    <td>{item.used_kg.toLocaleString()} kg</td>
+                    <td className={item.on_hand_kg < 70 ? "font-semibold text-red-600" : ""}>{item.on_hand_kg.toLocaleString()} kg <span className="text-xs text-gray-500">({(item.on_hand_kg / 70).toFixed(1)} bags)</span></td>
+                    <td>{item.cost_per_kg ? formatAmount(item.cost_per_kg) : "—"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Individual feeding status + Record dialog */}
-      <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-        <CardHeader className="pb-3 sm:pb-4">
-          <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-            <span className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">Individual Feeding Status</span>
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white w-full sm:w-auto">
-                  <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                  <span className="text-xs sm:text-sm">Record Feeding</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-                <DialogHeader>
-                  <DialogTitle>Record Feeding</DialogTitle>
-                </DialogHeader>
-                <Tabs value={recordType} onValueChange={v => setRecordType(v as any)} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="daily">Daily</TabsTrigger>
-                    <TabsTrigger value="weekly">Weekly</TabsTrigger>
-                    <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                  </TabsList>
-
-                  {/* ── Daily ── */}
-                  <TabsContent value="daily">
-                    <form onSubmit={handleDailySubmit}>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs font-medium">Select Pig or Pen</label>
-                          <div className="grid grid-cols-2 gap-2 mt-1">
-                            <div>
-                              <label className="text-xs text-gray-500">Pig</label>
-                              <Select value={dailyForm.pig_id} onValueChange={v => setDailyForm({ ...dailyForm, pig_id: v === 'none' ? '' : v, pen_id: '' })}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Select pig" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {localPigs?.map(p => <SelectItem key={p.pig_id ?? `${p.name}-${p.pen_id}`} value={p.pig_id ?? ''}>{p.name || p.pig_id || 'Unnamed pig'}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500">Pen</label>
-                              <Select value={dailyForm.pen_id} onValueChange={v => setDailyForm({ ...dailyForm, pen_id: v === 'none' ? '' : v, pig_id: '' })}>
-                                <SelectTrigger className="w-full"><SelectValue placeholder="Select pen" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {pens?.map(pen => <SelectItem key={pen.id} value={pen.id}>{pen.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              {dailyForm.pen_id && (() => {
-                                const cnt = getPigsInPen(dailyForm.pen_id).length
-                                return (
-                                  <p className={`text-xs mt-1 ${cnt === 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                    {cnt === 0 ? '⚠ No pigs in this pen' : `${cnt} pig${cnt === 1 ? '' : 's'} in pen`}
-                                  </p>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium">Feed type</label>
-                          <Input value={dailyForm.feed_type} onChange={e => setDailyForm({ ...dailyForm, feed_type: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs font-medium">Amount</label>
-                            <Input value={dailyForm.amount} onChange={e => setDailyForm({ ...dailyForm, amount: e.target.value })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium">Unit</label>
-                            <Select value={dailyForm.unit} onValueChange={v => setDailyForm({ ...dailyForm, unit: v })}>
-                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="grams">grams</SelectItem>
-                                <SelectItem value="kg">kg</SelectItem>
-                                <SelectItem value="liters">liters</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        {/* Live per-pig preview for daily pen feeding */}
-                        {dailyForm.pen_id && dailyForm.amount && (() => {
-                          const cnt = getPigsInPen(dailyForm.pen_id).length
-                          if (cnt === 0) return null
-                          const amtKg = toKg(parseFloat(dailyForm.amount), dailyForm.unit)
-                          const perPig = (amtKg / cnt).toFixed(3)
-                          return (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                              ≈ {perPig} kg/pig for {cnt} pigs
-                            </p>
-                          )
-                        })()}
-                        <div>
-                          <label className="text-xs font-medium">Notes</label>
-                          <Textarea value={dailyForm.notes} onChange={e => setDailyForm({ ...dailyForm, notes: e.target.value })} />
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                          <Button type="submit">Record</Button>
-                        </div>
-                      </div>
-                    </form>
-                  </TabsContent>
-
-                  {/* ── Weekly ── */}
-                  <TabsContent value="weekly">
-                    <form onSubmit={handleWeeklySubmit}>
-                      <div className="space-y-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Record total feed usage for a pen over the selected week.</p>
-                        <PenSelector penId={weeklyForm.pen_id} onChange={v => setWeeklyForm({ ...weeklyForm, pen_id: v })} />
-                        <div>
-                          <label className="text-xs font-medium">Feed type</label>
-                          <Input value={weeklyForm.feed_type} onChange={e => setWeeklyForm({ ...weeklyForm, feed_type: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs font-medium">Total Amount</label>
-                            <Input value={weeklyForm.total_amount} onChange={e => setWeeklyForm({ ...weeklyForm, total_amount: e.target.value })} placeholder="e.g., 50" />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium">Unit</label>
-                            <Select value={weeklyForm.unit} onValueChange={v => setWeeklyForm({ ...weeklyForm, unit: v })}>
-                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="kg">kg</SelectItem>
-                                <SelectItem value="liters">liters</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        {/* Live per-pig/day preview */}
-                        {weeklyForm.pen_id && weeklyForm.total_amount && (() => {
-                          const cnt = getPigsInPen(weeklyForm.pen_id).length
-                          if (cnt === 0) return null
-                          const numDays = Math.max(1, Math.floor((new Date(weeklyForm.end_date).getTime() - new Date(weeklyForm.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1)
-                          const total = parseFloat(weeklyForm.total_amount)
-                          if (isNaN(total)) return null
-                          const perPigPerDay = (total / cnt / numDays).toFixed(3)
-                          return (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                              ≈ {perPigPerDay} kg/pig/day ({cnt} pigs × {numDays} days)
-                            </p>
-                          )
-                        })()}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs font-medium">Start Date</label>
-                            <Input type="date" value={weeklyForm.start_date} onChange={e => setWeeklyForm({ ...weeklyForm, start_date: e.target.value })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium">End Date</label>
-                            <Input type="date" value={weeklyForm.end_date} onChange={e => setWeeklyForm({ ...weeklyForm, end_date: e.target.value })} />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium">Notes</label>
-                          <Textarea value={weeklyForm.notes} onChange={e => setWeeklyForm({ ...weeklyForm, notes: e.target.value })} placeholder="Optional notes" />
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                          <Button type="submit" disabled={weeklyForm.pen_id ? getPigsInPen(weeklyForm.pen_id).length === 0 : false}>
-                            Record Weekly
-                          </Button>
-                        </div>
-                      </div>
-                    </form>
-                  </TabsContent>
-
-                  {/* ── Monthly ── */}
-                  <TabsContent value="monthly">
-                    <form onSubmit={handleMonthlySubmit}>
-                      <div className="space-y-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Record total feed usage for a pen over the selected month.</p>
-                        <PenSelector penId={monthlyForm.pen_id} onChange={v => setMonthlyForm({ ...monthlyForm, pen_id: v })} />
-                        <div>
-                          <label className="text-xs font-medium">Feed type</label>
-                          <Input value={monthlyForm.feed_type} onChange={e => setMonthlyForm({ ...monthlyForm, feed_type: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs font-medium">Total Amount</label>
-                            <Input value={monthlyForm.total_amount} onChange={e => setMonthlyForm({ ...monthlyForm, total_amount: e.target.value })} placeholder="e.g., 200" />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium">Unit</label>
-                            <Select value={monthlyForm.unit} onValueChange={v => setMonthlyForm({ ...monthlyForm, unit: v })}>
-                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="kg">kg</SelectItem>
-                                <SelectItem value="liters">liters</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        {/* Live per-pig/day preview */}
-                        {monthlyForm.pen_id && monthlyForm.total_amount && (() => {
-                          const cnt = getPigsInPen(monthlyForm.pen_id).length
-                          if (cnt === 0) return null
-                          const numDays = Math.max(1, Math.floor((new Date(monthlyForm.end_date).getTime() - new Date(monthlyForm.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1)
-                          const total = parseFloat(monthlyForm.total_amount)
-                          if (isNaN(total)) return null
-                          const perPigPerDay = (total / cnt / numDays).toFixed(3)
-                          return (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                              ≈ {perPigPerDay} kg/pig/day ({cnt} pigs × {numDays} days)
-                            </p>
-                          )
-                        })()}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs font-medium">Start Date</label>
-                            <Input type="date" value={monthlyForm.start_date} onChange={e => setMonthlyForm({ ...monthlyForm, start_date: e.target.value })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium">End Date</label>
-                            <Input type="date" value={monthlyForm.end_date} onChange={e => setMonthlyForm({ ...monthlyForm, end_date: e.target.value })} />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium">Notes</label>
-                          <Textarea value={monthlyForm.notes} onChange={e => setMonthlyForm({ ...monthlyForm, notes: e.target.value })} placeholder="Optional notes" />
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                          <Button type="submit" disabled={monthlyForm.pen_id ? getPigsInPen(monthlyForm.pen_id).length === 0 : false}>
-                            Record Monthly
-                          </Button>
-                        </div>
-                      </div>
-                    </form>
-                  </TabsContent>
-                </Tabs>
-              </DialogContent>
-            </Dialog>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 sm:p-6">
-          {dailyRecords.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <p>No daily feeding records yet.</p>
-              <p className="text-sm mt-2">Use "Record Feeding" to track individual pig or pen feeding.</p>
-            </div>
-          ) : (
-            <div className="space-y-3 sm:space-y-4">
-              {sortedDailyRecords.map((record: any) => {
-                const isPig = !!record.pig_id
-                const entityId = isPig ? record.pig_id : record.pen_id
-                const entityName = isPig
-                  ? (localPigs.find(p => p.pig_id === entityId)?.name || entityId)
-                  : (pens.find((p: any) => p.id === entityId)?.name || entityId)
-                const entityType = isPig ? 'Pig' : 'Pen'
-                const feedTime = new Date(record.feeding_time).toLocaleString()
-                const amount = parseFloat(record.amount || 0)
-                const amountInKg = toKg(amount, record.unit || 'kg')
-                const numPigs = record.pen_id
-                  ? getPigsInPen(record.pen_id).length || 1
-                  : 1
-                const perPigKg = (amountInKg / numPigs).toFixed(3)
-
-                return (
-                  <div key={record.id || record.feeding_time}
-                    className="flex flex-col lg:flex-row lg:items-start lg:justify-between p-3 sm:p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-800/60 dark:to-gray-700/60 space-y-3 lg:space-y-0">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm sm:text-base">
-                        {entityType}: {entityName}
-                        {record.pen_id && numPigs > 1 && (
-                          <span className="ml-2 text-xs font-normal text-gray-500">({numPigs} pigs)</span>
-                        )}
-                      </h4>
-                      <div className="mt-2 space-y-1">
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Feed Type:</span> {record.feed_type || "N/A"}
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Amount:</span> {record.amount || "N/A"} {record.unit || ""}
-                          {record.pen_id && numPigs > 0 && (
-                            <span className="ml-2 text-blue-600 dark:text-blue-400">({perPigKg} kg/pig)</span>
-                          )}
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Fed At:</span> {feedTime}
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                          <span className="font-medium">Notes:</span> {record.notes || "None"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+      <Card className="bg-white/70 dark:bg-gray-800/70">
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Recent purchases</CardTitle></CardHeader>
+        <CardContent>
+          {purchases.length === 0 ? <p className="text-sm text-gray-500">No purchases yet.</p> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs uppercase text-gray-500"><th className="pb-2">Date</th><th className="pb-2">Feed</th><th className="pb-2">Quantity</th><th className="pb-2">Total</th><th className="pb-2">Supplier</th></tr></thead>
+                <tbody>{purchases.map(item => (
+                  <tr key={item.id} className="border-t dark:border-gray-700">
+                    <td className="py-2">{dayjs(item.purchase_date).format("D MMM YYYY")}</td>
+                    <td>{item.feed_type}{item.brand ? ` · ${item.brand}` : ""}</td>
+                    <td>{Number(item.quantity)} {UNITS[item.unit] ?? item.unit}</td>
+                    <td>{formatAmount(Number(item.total_cost))}</td>
+                    <td>{item.supplier || "—"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Feeding history by period */}
-      <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-        <CardHeader className="pb-3 sm:pb-4">
-          <CardTitle className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">
-            Feeding History (By Period and Feed Type)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 sm:p-6">
-          <Tabs defaultValue="weekly" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="daily">Daily</TabsTrigger>
-              <TabsTrigger value="weekly">Weekly</TabsTrigger>
-              <TabsTrigger value="monthly">Monthly</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="daily" className="space-y-3">
-              {sortedDaily.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">No daily records yet.</p>
-              ) : sortedDaily.map((day: any, index) => {
-                const numPigs = safePigs.length
-                const avg = numPigs > 0 ? (day.total / numPigs).toFixed(3) : 'N/A'
-                return (
-                  <div key={index} className="p-2 bg-gray-50 dark:bg-gray-700 rounded space-y-1">
-                    <div className="flex justify-between font-medium text-sm">
-                      <span>{new Date(day.date).toLocaleDateString()}</span>
-                      <span>
-                        {day.total.toFixed(2)} kg
-                        {numPigs > 0 && ` · ${avg} kg/pig`}
-                      </span>
-                    </div>
-                    {Object.entries(day.feed_types).map(([feedType, amt]: any) => (
-                      <div key={feedType} className="flex justify-between text-xs text-gray-600 dark:text-gray-400 pl-2">
-                        <span>{feedType}</span>
-                        <span>{amt.toFixed(2)} kg</span>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })}
-            </TabsContent>
-
-            <TabsContent value="weekly" className="space-y-3">
-              {sortedWeekly.length === 0
-                ? <p className="text-gray-500 dark:text-gray-400">No weekly records yet.</p>
-                : sortedWeekly.map(renderPeriodRow)}
-            </TabsContent>
-
-            <TabsContent value="monthly" className="space-y-3">
-              {sortedMonthly.length === 0
-                ? <p className="text-gray-500 dark:text-gray-400">No monthly records yet.</p>
-                : sortedMonthly.map(renderPeriodRow)}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      {/* Feed inventory */}
-      <Card className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm border-white/20 dark:border-gray-600/20 shadow-lg">
-        <CardHeader className="pb-3 sm:pb-4">
-          <CardTitle className="text-gray-900 dark:text-gray-100 text-base sm:text-lg">Feed Inventory & Requirements</CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 sm:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-3 sm:mt-5">
-            <div className="p-3 sm:p-4 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg border border-blue-200 dark:border-blue-700">
-              <h4 className="font-medium mb-3 text-blue-800 dark:text-blue-300 text-sm sm:text-base">Daily Requirements</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Pellets:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{(getTotalDailyFeed() * 0.7).toFixed(1)}g</span>
-                </div>
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Hay:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{(getTotalDailyFeed() * 0.2).toFixed(1)}g</span>
-                </div>
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Vegetables:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{(getTotalDailyFeed() * 0.1).toFixed(1)}g</span>
-                </div>
-                <div className="flex justify-between font-medium border-t border-blue-200 dark:border-blue-700 pt-2 text-xs sm:text-sm">
-                  <span className="text-gray-900 dark:text-gray-100">Total:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{getTotalDailyFeed().toFixed(1)}g</span>
-                </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Record feed purchase</DialogTitle></DialogHeader>
+          <form onSubmit={save} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium">Feed</label>
+                <select value={form.feed_type} onChange={e => setForm({ ...form, feed_type: e.target.value })} className="h-9 w-full rounded-md border bg-white px-3 text-sm dark:bg-gray-900">
+                  {feedTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Quantity</label>
+                <Input type="number" min={0} step="0.5" required value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Unit</label>
+                <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="h-9 w-full rounded-md border bg-white px-3 text-sm dark:bg-gray-900">
+                  {Object.entries(UNITS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Price per unit</label>
+                <Input type="number" min={0} value={form.cost_per_unit} onChange={e => setForm({ ...form, cost_per_unit: e.target.value })} placeholder="e.g. 3400" />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Date</label>
+                <Input type="date" value={form.purchase_date} onChange={e => setForm({ ...form, purchase_date: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Brand</label>
+                <Input value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Supplier</label>
+                <Input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} />
               </div>
             </div>
-            <div className="p-3 sm:p-4 bg-gradient-to-r from-green-50/80 to-green-100/80 dark:from-green-900/30 dark:to-green-800/30 rounded-lg border border-green-200 dark:border-green-700">
-              <h4 className="font-medium mb-3 text-green-800 dark:text-green-300 text-sm sm:text-base">Weekly Requirements</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Pellets:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{((getTotalDailyFeed() * 0.7 * 7) / 1000).toFixed(2)}kg</span>
-                </div>
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Hay:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{((getTotalDailyFeed() * 0.2 * 7) / 1000).toFixed(2)}kg</span>
-                </div>
-                <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-gray-700 dark:text-gray-300">Vegetables:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{((getTotalDailyFeed() * 0.1 * 7) / 1000).toFixed(2)}kg</span>
-                </div>
-                <div className="flex justify-between font-medium border-t border-green-200 dark:border-green-700 pt-2 text-xs sm:text-sm">
-                  <span className="text-gray-900 dark:text-gray-100">Total:</span>
-                  <span className="text-gray-900 dark:text-gray-100">{((getTotalDailyFeed() * 7) / 1000).toFixed(2)}kg</span>
-                </div>
-              </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save</Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

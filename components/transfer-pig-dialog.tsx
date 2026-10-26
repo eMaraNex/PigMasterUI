@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/lib/toast-provider";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import * as utils from "@/lib/utils";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -132,23 +132,13 @@ export default function TransferPigDialog({
     setSuccess(false);
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) {
-        throw new Error("Authentication token not found");
-      }
 
       const response = await axios.post(
-        `${utils.apiUrl}/pigs/${farmId}/${pigId}/transfer`,
+        `${utils.apiUrl}/pigs/transfer/${pigId}`,
         {
           new_pen_id: selectedPenId,
           transfer_reason: transferReason,
           transfer_notes: transferNotes || null,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
         }
       );
 

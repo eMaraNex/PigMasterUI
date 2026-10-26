@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,9 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, AlertTriangle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import axios from "axios"
+import { apiRequest as axios } from "@/lib/api/client"
 import * as utils from "@/lib/utils"
 import { useToast } from "@/lib/toast-provider"
+import { api, useGetPensQuery, useGetRowsQuery, emptyList } from "@/lib/redux/api"
+import { useAppDispatch } from "@/lib/redux/hooks"
 
 export default function AddPenDialog() {
   const { user } = useAuth()
@@ -24,65 +26,10 @@ export default function AddPenDialog() {
     material: "",
     features: "",
   })
-  const [rows, setRows] = useState<any[]>([])
-  const [pens, setPens] = useState<any[]>([])
+  const { data: rows = emptyList() } = useGetRowsQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
+  const { data: pens = emptyList() } = useGetPensQuery(user?.farm_id ?? "", { skip: !open || !user?.farm_id })
+  const dispatch = useAppDispatch()
   const { showError, showWarn } = useToast();
-
-  const loadFromStorage = (farmId: string) => {
-    try {
-      const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`)
-      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`)
-      return {
-        rows: cachedRows ? JSON.parse(cachedRows) : [],
-        pens: cachedPens ? JSON.parse(cachedPens) : [],
-      }
-    } catch (error) {
-      showError('Error', error?.toString())
-      return { rows: [], pens: [] }
-    }
-  }
-
-  const saveToStorage = (farmId: string, data: { rows: any[], pens: any[] }) => {
-    try {
-      localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows))
-      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens))
-    } catch (error) {
-      showError('Error', error?.toString())
-    }
-  }
-
-  useEffect(() => {
-    if (open && user?.farm_id) {
-      // Check local storage first
-      const cachedData = loadFromStorage(user.farm_id)
-      if (cachedData.rows.length || cachedData.pens.length) {
-        setRows(cachedData.rows)
-        setPens(cachedData.pens)
-      }
-
-      // Fetch fresh data from API
-      const fetchData = async () => {
-        try {
-          const [rowsResponse, pensResponse] = await Promise.all([
-            axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`),
-            axios.get(`${utils.apiUrl}/pens/${user.farm_id}`),
-          ])
-          const newRows = rowsResponse.data.data || []
-          const newPens = pensResponse.data.data || []
-          setRows(newRows)
-          setPens(newPens)
-          saveToStorage(user.farm_id ?? '', { rows: newRows, pens: newPens })
-        } catch (error) {
-          showError('Error', error?.toString())
-          if (cachedData.rows.length || cachedData.pens.length) {
-            setRows(cachedData.rows)
-            setPens(cachedData.pens)
-          }
-        }
-      }
-      fetchData()
-    }
-  }, [open, user])
 
   const getRowPenCount = (rowName: string) => {
     return pens.filter((pen) => pen.row_name === rowName).length
@@ -119,9 +66,7 @@ export default function AddPenDialog() {
     }
 
     const newPen = {
-      id: `${formData.rowName}-${formData.level}${formData.position}`,
-      farm_id: user.farm_id,
-      row_name: formData.rowName,
+      row_id: rows.find((row) => row.name === formData.rowName)?.id,
       level: formData.level,
       position: Number.parseInt(formData.position),
       size: formData.size,
@@ -130,16 +75,12 @@ export default function AddPenDialog() {
         .split(",")
         .map((f) => f.trim())
         .filter((f) => f),
-      is_occupied: false,
     }
 
     try {
-      const response = await axios.post(`${utils.apiUrl}/pens/${user.farm_id}`, newPen)
+      const response = await axios.post(`${utils.apiUrl}/pens/create`, newPen)
       if (response.data.success) {
-        // Update local storage
-        const updatedPens = [...pens, response.data.data]
-        saveToStorage(user.farm_id, { rows, pens: updatedPens })
-        setPens(updatedPens)
+        dispatch(api.util.invalidateTags([{ type: "Pens", id: user.farm_id }]))
         setOpen(false)
         setFormData({
           rowName: "",

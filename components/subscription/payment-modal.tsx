@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import axios from 'axios'
+import { apiRequest as axios } from "@/lib/api/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,8 +37,8 @@ interface PaymentPayload {
         duration: string;
         subscription_startdate: string;
         subscription_enddate: string;
-        original_amount: number;
-        original_currency: string;
+        original_amount?: number;
+        original_currency?: string;
         [key: string]: any; // Allow dynamic keys for card_details, email, etc.
     };
 }
@@ -66,7 +66,7 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
     const yearlyPrice = utils.calculateAnnualPrice(plan.price);
     const currentPrice = selectedPeriod === 'monthly' ? monthlyPrice : yearlyPrice;
     const savePercent = selectedPeriod === 'yearly' ? utils.getSavePercent() : 0;
-    const userCurrency = localStorage.getItem('pig_farm_currency') ?? 'KES';
+    const userCurrency = currency;
     useEffect(() => {
         if (ratesLoading) return;
         if (getCurrencyRates()[userCurrency]) {
@@ -87,12 +87,15 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
     const handlePayment = async () => {
         setLoading(true)
         try {
-            let payloadCurrency = userCurrency;
-            let payloadAmount = convertFromBaseCurrency(currentPrice, payloadCurrency);
-
-            if (paymentMethod === 'mpesa') {
-                payloadCurrency = 'KES';
-                payloadAmount = convertFromBaseCurrency(currentPrice, 'KES');
+            if (paymentMethod !== 'mpesa') {
+                throw new Error('Only M-Pesa is currently available. Card and PayPal payments are coming soon.');
+            }
+            const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
+                params: { plan: plan.id, period: selectedPeriod },
+            });
+            const quote = quoteResponse.data?.data;
+            if (!quote || typeof quote.amount !== 'number' || !quote.currency) {
+                throw new Error('The server returned an invalid payment quote. Please retry.');
             }
 
             const startDate = new Date();
@@ -108,18 +111,16 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
 
             const basePayload: Omit<PaymentPayload, 'phone_number'> = {
                 plan: plan.id,
-                amount: 1, 
-                currency: payloadCurrency, 
+                amount: quote.amount,
+                currency: quote.currency,
                 payment_mode: paymentMethod,
                 tier: plan.name,
                 metadata: { 
                     plan_period: selectedPeriod, 
                     initiated_from: 'client_modal',
-                    duration,
                     subscription_startdate: startDateStr,
                     subscription_enddate: endDateStr,
-                    original_amount: currentPrice,
-                    original_currency: 'USD'
+                    duration,
                 }
             }
 
@@ -132,6 +133,7 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
                 }
                 fullPayload.phone_number = paymentData.phoneNumber.replace('+', '') // Normalize to 254...
             } else if (paymentMethod === 'stripe') {
+                throw new Error('Card payments are coming soon.');
                 if (!paymentData.cardNumber || !paymentData.expiryDate || !paymentData.cvv || !paymentData.cardName) {
                     throw new Error('All card details are required')
                 }
@@ -142,6 +144,7 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
                     name: paymentData.cardName
                 }
             } else if (paymentMethod === 'paypal') {
+                throw new Error('PayPal payments are coming soon.');
                 if (!paymentData.email || !paymentData.email.includes('@')) {
                     throw new Error('Valid PayPal email is required')
                 }
@@ -149,18 +152,18 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
             }
 
             // Call API using axios similar to the example
-            const token = localStorage.getItem("pig_farm_token")
+            // A fresh key per attempt; the API also reuses a matching pending payment, so double clicks never send two prompts.
             const response = await axios.post(
                 `${utils.apiUrl}/payments`,
                 fullPayload,
-                { headers: { Authorization: `Bearer ${token}` } }
+                { headers: { "Idempotency-Key": crypto.randomUUID() } }
             )
 
             const data = response.data;
             
             toast({ 
-                title: "Payment Successful!", 
-                description: `Transaction ID: ${data.data?.transaction_id || 'N/A'}` 
+                title: "Payment initiated",
+                description: data.data?.message || `Complete the M-Pesa prompt for ${quote.currency} ${quote.amount}.`
             })
 
             window.location.reload()
@@ -182,13 +185,9 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
 
     // Validation helpers
     const isMpesaValid = paymentData.phoneNumber?.startsWith('+254')
-    const isStripeValid = paymentData.cardNumber && paymentData.expiryDate && paymentData.cvv && paymentData.cardName
-    const isPaypalValid = paymentData.email && paymentData.email.includes('@')
-
-    const isFormValid = 
-        paymentMethod === 'mpesa' ? isMpesaValid :
-        paymentMethod === 'stripe' ? isStripeValid :
-        paymentMethod === 'paypal' ? isPaypalValid : true
+    const isStripeValid = false
+    const isPaypalValid = false
+    const isFormValid = paymentMethod === 'mpesa' && isMpesaValid
 
     return (
         <Dialog open={true} onOpenChange={onClose}>
@@ -218,17 +217,18 @@ export default function PaymentModal({ plan, onClose, onSuccess }: PaymentModalP
                     </TabsList>
                 </Tabs>
 
+                {/* Keep incomplete providers disabled: only M-Pesa has a real backend integration. */}
                 <Tabs value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-4">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="mpesa" className="flex items-center space-x-1">
                             <Smartphone className="h-4 w-4" />
                             <span>M-Pesa</span>
                         </TabsTrigger>
-                        <TabsTrigger value="stripe" className="flex items-center space-x-1">
+                        <TabsTrigger value="stripe" disabled className="flex items-center space-x-1">
                             <CreditCard className="h-4 w-4" />
                             <span>Card</span>
                         </TabsTrigger>
-                        <TabsTrigger value="paypal" className="flex items-center space-x-1">
+                        <TabsTrigger value="paypal" disabled className="flex items-center space-x-1">
                             <DollarSign className="h-4 w-4" />
                             <span>PayPal</span>
                         </TabsTrigger>

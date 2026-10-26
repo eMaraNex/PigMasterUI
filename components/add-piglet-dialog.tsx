@@ -10,7 +10,7 @@ import { useToast } from '@/lib/toast-provider';
 import { Circle, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as utils from "@/lib/utils";
-import axios from "axios";
+import { apiRequest as axios } from "@/lib/api/client";
 import type { AddPigletDialogProps, PigletFormData } from "@/types";
 import { colors } from "@/lib/constants";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
@@ -32,8 +32,8 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
 
     const fetchInitialData = async () => {
       try {
-        const breedingResponse = await axios.get(`${utils.apiUrl}/breeds/history/${user.farm_id}/${sowId}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+        const breedingResponse = await axios.get(`${utils.apiUrl}/breeding-records/list`, { params: { sow_id: sowId, limit: 100 },
+          
         });
         const breedingData = breedingResponse.data.data || [];
         const breedingArray = Array.isArray(breedingData) ? breedingData : [breedingData];
@@ -127,76 +127,45 @@ export default function AddPigletDialog({ pig, sowId, sowName, boarName, onClose
 
     dispatch(setLoading(true));
     try {
-      // Find or create a breeding record
-      let breedingRecordId
-      const breedingResponse = await axios.get(`${utils.apiUrl}/breeds/${user.farm_id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` },
+      // Use the sow's open breeding record (or create one), record the birth, then the litter.
+      const breedingResponse = await axios.get(`${utils.apiUrl}/breeding-records/list`, {
+        params: { sow_id: sowId, limit: 100, sort: "-mating_date" },
       });
       const breedingRecords = breedingResponse.data.data || [];
-      const specificBreedingRecord = breedingRecords.find((item: { sow_id: number | string }) => item.sow_id == sowId)
+      let specificBreedingRecord = breedingRecords.find((item: { actual_birth_date?: string | null }) => !item.actual_birth_date)
 
       if (!specificBreedingRecord) {
-        // Create a new breeding record
-        const newBreedingResponse = await axios.post(
-          `${utils.apiUrl}/breeds/${user.farm_id}`,
-          {
-            sow_id: sowId,
-            boar_id: selectedBoarOption?.boar_id || null,
-            mating_date: new Date(new Date(actualBirthDate).getTime() - 114 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-            expected_birth_date: actualBirthDate,
-            actual_birth_date: actualBirthDate,
-            number_of_piglets: piglets.length,
-            notes: piglets[0]?.notes || null,
-          },
-          { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
-        );
-        breedingRecordId = newBreedingResponse.data.data.id
-      } else {
-        breedingRecordId = specificBreedingRecord.id
-        // Update existing breeding record
-        await axios.put(
-          `${utils.apiUrl}/breeds/${user.farm_id}/${specificBreedingRecord.id}`,
-          {
-            actual_birth_date: actualBirthDate,
-            number_of_piglets: piglets.length,
-            notes: piglets[0]?.notes || null,
-          },
-          { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
-        );
+        const newBreedingResponse = await axios.post(`${utils.apiUrl}/breeding-records/create`, {
+          sow_id: sowId,
+          boar_id: selectedBoarOption?.boar_id || null,
+          mating_date: new Date(new Date(actualBirthDate).getTime() - 114 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split("T")[0],
+          expected_birth_date: actualBirthDate,
+          notes: piglets[0]?.notes || null,
+        });
+        specificBreedingRecord = newBreedingResponse.data.data
       }
 
-      // Update pig (sow) to mark as not pregnant
-      await axios.put(
-        `${utils.apiUrl}/pigs/${user.farm_id}/${sowId}`,
-        {
-          is_pregnant: false,
-          pregnancy_start_date: null,
-          expected_birth_date: null,
-        },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
-      );
-
-      // Create piglet records
-      const pigletData = piglets.map((piglet) => ({
-        breeding_record_id: breedingRecordId,
-        piglet_number: piglet.piglet_number,
-        birth_weight: piglet.birth_weight && piglet.birth_weight.trim() !== "" ? Number.parseFloat(piglet.birth_weight) : null,
-        gender: piglet.gender || null,
-        color: piglet.color || null,
-        status: piglet.status || "alive",
-        parent_male_id: selectedBoarOption?.boar_id || null,
-        parent_female_id: sowId,
-        notes: piglet.notes || null,
+      // Recording the birth also clears the sow's pregnancy and schedules post-birth alerts.
+      await axios.put(`${utils.apiUrl}/breeding-records/update/${specificBreedingRecord.id}`, {
         actual_birth_date: actualBirthDate,
-      }));
+        number_of_piglets: piglets.length,
+        notes: piglets[0]?.notes || null,
+      });
 
-      const response = await axios.post(
-        `${utils.apiUrl}/breeds/piglets/${user.farm_id}`,
-        { pigletz: pigletData },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("pig_farm_token")}` } },
-      );
+      const response = await axios.post(`${utils.apiUrl}/breeding-records/litter`, {
+        breeding_record_id: specificBreedingRecord.id,
+        actual_birth_date: actualBirthDate,
+        piglets: piglets.map((piglet) => ({
+          piglet_number: piglet.piglet_number,
+          birth_weight: piglet.birth_weight && piglet.birth_weight.trim() !== "" ? Number.parseFloat(piglet.birth_weight) : null,
+          gender: piglet.gender || null,
+          color: piglet.color || null,
+          status: piglet.status || "alive",
+          notes: piglet.notes || null,
+        })),
+      });
 
       if (response.data.success) {
         showSuccess("Success", `${piglets.length} piglet${piglets.length !== 1 ? "s" : ""} added successfully.`)

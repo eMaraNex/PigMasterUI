@@ -1,13 +1,12 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PiggyBank, Heart, Pill, AlertTriangle, Building } from "lucide-react";
 import PenLayout from "@/components/pen-layout";
-import PigProfile from "@/components/pig-profile";
 import BreedingManager from "@/components/breeding-manager";
 import { WhatsAppButton } from "@/components/whatsapp-button"
 import HealthTracker from "@/components/health-tracker";
@@ -18,7 +17,7 @@ import AnalyticsCharts from "@/components/analytics-charts";
 import CurrencySelector from "@/components/currency-selector";
 import AddRowDialog from "@/components/add-row-dialog";
 import FarmBanner from "@/components/farm-banner";
-import Calendar, { type CalendarEvent } from "@/components/calender";
+import Calendar from "@/components/calender";
 import EmailVerificationBanner from "@/components/email-verification-banner";
 import ProtectedRoute from "@/components/auth/protected-route";
 import ThemeToggle from "@/components/theme-toggle";
@@ -28,13 +27,10 @@ import { useToast } from "@/lib/toast-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { CurrencyProvider } from "@/lib/currency-context";
-import axios from "axios";
 import * as utils from "@/lib/utils";
 import type { Pig as PigType } from "@/types";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/shared/sidebar";
-import { Alert, ServerAlert, AlertCalendar } from "@/types";
-import { penNamesConversion } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import FarmCreationModal from "@/components/farm-creation-modal";
 import RowBanner from "@/components/row-banner";
@@ -42,13 +38,44 @@ import SkeletonDashboard from "@/components/skeletons/dashboard/skeleton";
 import ClientHeaderWrapper from "@/components/ClientHeaderWrapper";
 import { useSubscription } from "@/lib/subscription-context";
 import UpgradePrompt from "@/components/shared/upgradeprompt";
+import { useAppDispatch } from "@/lib/redux/hooks";
+import { setSelectedFarmId } from "@/lib/redux/preferences/preferencesSlice";
+import { api, useGetHealthSummaryQuery } from "@/lib/redux/api";
+import { fetchFresh } from "@/lib/redux/fetch-fresh";
+import { usePermissions } from "@/lib/permissions";
+import OverviewReminders from "@/components/overview-reminders";
+import LegalLinks from "@/components/legal/legal-links";
+
+const TABS: { value: string; label: string; object?: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "pens", label: "Pens", object: "pens" },
+  { value: "breeding", label: "Breeding", object: "breeding_records" },
+  { value: "health", label: "Health", object: "health_records" },
+  { value: "feeding", label: "Feeding", object: "feeding_records" },
+  { value: "earnings", label: "Earnings", object: "earnings" },
+  { value: "reports", label: "Reports", object: "reports" },
+  { value: "analytics", label: "Analytics", object: "reports" },
+  { value: "calender", label: "Calendar", object: "alerts" },
+];
 
 const DashboardContent: React.FC = () => {
   const { user, logout } = useAuth();
   const { showError } = useToast();
-  const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier } = useSubscription();
-  const [selectedPig, setSelectedPig] = useState<PigType | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  const { isFeatureAvailable, isTrialActive, trialDaysLeft, tier, ready: subscriptionReady, isFarmOwner } = useSubscription();
+  const { can } = usePermissions();
+  const [activeTab, setActiveTabState] = useState<string>("overview");
+  // The open tab lives in the URL (?tab=pens) so Back from a pig, pen or other page returns to it.
+  const setActiveTab = useCallback((tab: string) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    if (tab === "overview") url.searchParams.delete("tab"); else url.searchParams.set("tab", tab);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab) setActiveTabState(tab);
+  }, []);
+  const { data: healthSummary } = useGetHealthSummaryQuery(undefined, { skip: !user?.farm_id });
   const [pigs, setPigs] = useState<PigType[]>([]);
   const [pens, setPens] = useState<any[]>([]);
   const [rows, setRows] = useState<any[]>([]);
@@ -56,27 +83,14 @@ const DashboardContent: React.FC = () => {
   const [dataLoaded, setDataLoaded] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [calendarEvents, setCalendarEvents] = useState<AlertCalendar[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [showMandatoryRowModal, setShowMandatoryRowModal] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState<boolean>(false);
 
-  const tempFarmId = localStorage.getItem("pig_farm_id");
-  let farmId;
-  try {
-    farmId = tempFarmId ? JSON.parse(tempFarmId) : null;
-  } catch (e) {
-    farmId = tempFarmId;
-  }
-  const finalFarmId =
-    farmId && typeof farmId === "object" ? farmId.farmId : farmId;
-
-  // Set hasFarm to true only if finalFarmId is a non-empty string
-  const [hasFarm, setHasFarm] = useState<boolean>(
-    !!finalFarmId && finalFarmId !== ""
-  );
+  const hasFarm = Boolean(user?.farm_id);
   const hasRow = rows?.length > 0;
+  // Tabs the user's farm role can open (the API enforces the same permissions).
+  const visibleTabs = useMemo(() => TABS.filter(tab => !tab.object || can(tab.object, "read")), [can]);
   const [breedingRefreshTrigger, setBreedingRefreshTrigger] =
     useState<number>(0);
   const [showAddPigletDialog, setShowAddPigletDialog] = useState<boolean>(false);
@@ -85,14 +99,16 @@ const DashboardContent: React.FC = () => {
   const tabsListRef = useRef<HTMLDivElement>(null);
   const notifiedPigsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   const handleAddRow = () => {
     setAddRowOpen(true);
     setShowMandatoryRowModal(false);
   }
 
-  const cachedFarmDetails = localStorage.getItem(`pig_farm_data`);
-  const farmDetails = cachedFarmDetails ? JSON.parse(cachedFarmDetails) : [];
+  useEffect(() => {
+    dispatch(setSelectedFarmId(user?.farm_id || null));
+  }, [dispatch, user?.farm_id]);
 
   useEffect(() => {
     if (hasFarm && dataLoaded && rows.length === 0) {
@@ -101,54 +117,6 @@ const DashboardContent: React.FC = () => {
       setShowMandatoryRowModal(false);
     }
   }, [hasFarm, dataLoaded, rows.length])
-
-  function transformRawEvents(rawData: AlertCalendar[]): CalendarEvent[] {
-    const transformedEvents: CalendarEvent[] = [];
-    const today = new Date();
-
-    rawData.forEach((rawItem) => {
-      rawItem.notify_on.forEach((notifyDateStr) => {
-        const notifyDate = new Date(notifyDateStr);
-        const type: "event" | "notification" = notifyDate < today ? "event" : "notification"
-        const time: string | undefined = undefined;
-        transformedEvents.push({
-          id: rawItem.id,
-          date: notifyDate.toISOString().split("T")[0],
-          title: rawItem.name,
-          description: rawItem.message,
-          type: type,
-          time: time,
-        });
-      });
-    });
-    return transformedEvents;
-  }
-
-  const loadFromStorage = useCallback((farmId: string) => {
-    try {
-      const cachedRows = localStorage.getItem(`pig_farm_rows_${farmId}`);
-      const cachedPens = localStorage.getItem(`pig_farm_pens_${farmId}`);
-      const cachedPigs = localStorage.getItem(`pig_farm_pigs_${farmId}`);
-      return {
-        rows: cachedRows ? JSON.parse(cachedRows) : [],
-        pens: cachedPens ? JSON.parse(cachedPens) : [],
-        pigs: cachedPigs ? JSON.parse(cachedPigs) : [],
-      };
-    } catch (error) {
-      console.error("Error loading from storage:", error);
-      return { rows: [], pens: [], pigs: [] };
-    }
-  }, []);
-
-  const saveToStorage = useCallback((farmId: string, data: { rows: any[]; pens: any[]; pigs: any[] }) => {
-    try {
-      localStorage.setItem(`pig_farm_rows_${farmId}`, JSON.stringify(data.rows));
-      localStorage.setItem(`pig_farm_pens_${farmId}`, JSON.stringify(data.pens));
-      localStorage.setItem(`pig_farm_pigs_${farmId}`, JSON.stringify(data.pigs));
-    } catch (error) {
-      console.error("Error saving to storage:", error);
-    }
-  }, [])
 
   const loadData = useCallback(async () => {
     if (!user?.farm_id) {
@@ -159,44 +127,14 @@ const DashboardContent: React.FC = () => {
 
     setIsLoading(true);
 
-    const cachedData = loadFromStorage(user.farm_id)
-    if (cachedData.rows.length || cachedData.pens.length || cachedData.pigs.length) {
-      setRows(cachedData.rows);
-      setPens(cachedData.pens);
-      setPigs(cachedData.pigs);
-      setDataLoaded(true);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const token = localStorage.getItem("pig_farm_token")
-      if (!token) {
-        console.warn("No authentication token found")
-        setDataLoaded(true);
-        setIsLoading(false);
-        return;
-      }
-
-      const [rowsResponse, pensResponse, pigsResponse, alertsResponse, calenderResponse] = await Promise.all([
-        axios.get(`${utils.apiUrl}/rows/list/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/alerts/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/alerts/calendar/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const farmKey = user.farm_id;
+      const [newRows, newPens, pigsResponse] = await Promise.all([
+        fetchFresh(dispatch, api.endpoints.getRows, farmKey),
+        fetchFresh(dispatch, api.endpoints.getPens, farmKey),
+        fetchFresh<PigType, string>(dispatch, api.endpoints.getPigs, farmKey),
       ]);
-
-      let newPigs = pigsResponse.data.data || [];
+      let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
         ...r,
         expected_birth_date:
@@ -208,32 +146,9 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const newRows = rowsResponse.data.data || [];
-      const newPens = pensResponse.data.data || [];
-      const calendarAlerts = calenderResponse.data.data || [];
-      const serverAlerts: ServerAlert[] = alertsResponse.data.data || [];
-
-      const mappedAlerts: Alert[] = serverAlerts.map((alert) => ({
-        type:
-          alert.alert_type === "birth"
-            ? "Birth Expected"
-            : alert.alert_type === "medication"
-              ? "Medication Due"
-              : alert.name,
-        message: alert.message,
-        variant: alert.severity === "high" ? "destructive" : alert.severity === "medium" ? "secondary" : "outline",
-      }))
-
       setRows(newRows);
       setPens(newPens);
       setPigs(newPigs);
-      setAlerts(mappedAlerts);
-      setCalendarEvents(calendarAlerts);
-      saveToStorage(user.farm_id, {
-        rows: newRows,
-        pens: newPens,
-        pigs: newPigs,
-      });
       setDataLoaded(true);
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -242,26 +157,19 @@ const DashboardContent: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.farm_id, loadFromStorage, saveToStorage, showError])
+  }, [dispatch, user?.farm_id, showError])
 
   // Refresh only pigs and pens after transfer
   const refreshPigsAndPens = useCallback(async () => {
     if (!user?.farm_id) return;
 
     try {
-      const token = localStorage.getItem("pig_farm_token");
-      if (!token) return;
-
-      const [pensResponse, pigsResponse] = await Promise.all([
-        axios.get(`${utils.apiUrl}/pens/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${utils.apiUrl}/pigs/${user.farm_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+      const [newPens, pigsResponse] = await Promise.all([
+        fetchFresh(dispatch, api.endpoints.getPens, user.farm_id),
+        fetchFresh<PigType, string>(dispatch, api.endpoints.getPigs, user.farm_id),
       ]);
 
-      let newPigs = pigsResponse.data.data || [];
+      let newPigs = pigsResponse || [];
       newPigs = newPigs.map((r: any) => ({
         ...r,
         expected_birth_date:
@@ -273,28 +181,21 @@ const DashboardContent: React.FC = () => {
             : r.expected_birth_date,
       }));
 
-      const newPens = pensResponse.data.data || [];
-
       // Update state
       setPens(newPens);
       setPigs(newPigs);
 
-      // Update localStorage
-      saveToStorage(user.farm_id, { rows, pens: newPens, pigs: newPigs });
     } catch (error) {
       console.error("Error refreshing pigs and pens:", error);
     }
-  }, [user?.farm_id, saveToStorage, rows]);
+  }, [dispatch, user?.farm_id]);
 
   const handlePigsUpdate = useCallback(
     (updatedPigs: PigType[]) => {
       setPigs(updatedPigs);
-      if (user?.farm_id) {
-        saveToStorage(user.farm_id, { rows, pens, pigs: updatedPigs });
-      }
       setBreedingRefreshTrigger((prev) => prev + 1);
     },
-    [user, rows, pens, saveToStorage],
+    [],
   );
 
   //Check this later if condition necessary
@@ -312,32 +213,14 @@ const DashboardContent: React.FC = () => {
 
   useEffect(() => {
     if (tabsListRef.current) {
-      const tabIndex = [
-        "overview",
-        "pens",
-        "breeding",
-        "health",
-        "feeding",
-        "earnings",
-        "reports",
-        "analytics",
-        "calender",
-      ].indexOf(activeTab);
-      const tabWidth = 70;
+      const tabIndex = visibleTabs.findIndex(tab => tab.value === activeTab);
+      const tabWidth = 76;
       tabsListRef.current.scrollTo({
         left: tabIndex * tabWidth,
         behavior: "smooth",
       });
     }
-  }, [activeTab]);
-
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setHasFarm(!!farmId || !!user?.farm_id);
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [user, farmId]);
+  }, [activeTab, visibleTabs]);
 
   const handleRowAdded = useCallback(() => {
     setDataLoaded(false);
@@ -345,10 +228,10 @@ const DashboardContent: React.FC = () => {
   }, [loadData]);
 
   const handleFarmCreated = useCallback(() => {
-    setHasFarm(true);
+    dispatch(api.util.invalidateTags(["CurrentUser", "Farm"]));
     setDataLoaded(false);
     loadData();
-  }, [loadData]);
+  }, [dispatch, loadData]);
 
   const handleRowCreated = useCallback(() => {
     setDataLoaded(false);
@@ -369,7 +252,6 @@ const DashboardContent: React.FC = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const events = transformRawEvents(calendarEvents);
   const totalPigs = pigs.length;
   const sows = pigs.filter((r) => r.gender === "female").length;
   const boars = pigs.filter((r) => r.gender === "male").length;
@@ -418,30 +300,39 @@ const DashboardContent: React.FC = () => {
 
       <main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {user && !user.email_verified && <EmailVerificationBanner />}
-        {isTrialActive && (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm">
+        {subscriptionReady && isTrialActive && (
+          <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
             <p className="font-medium">
-              You&apos;re on a full-access trial. {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left to explore every feature.
+              Full-access trial: {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left to explore every feature.
             </p>
+            {isFarmOwner && (
+              <Button size="sm" variant="outline" onClick={() => router.push("/pricing")} className="rounded-xl border-amber-300 bg-white/70 text-amber-900 hover:bg-white">
+                Choose a plan
+              </Button>
+            )}
           </div>
         )}
-        {!isTrialActive && tier === "free" && (
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 text-sm text-rose-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        {subscriptionReady && !isTrialActive && tier === "free" && (
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 text-sm text-rose-900 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-rose-900 dark:bg-rose-900/20 dark:text-rose-200">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-rose-500" />
               <div>
                 <p className="font-semibold">Your trial has ended.</p>
-                <p className="text-xs text-rose-800">
-                  Upgrade to keep using breeding, analytics, and other premium tools.
+                <p className="text-xs text-rose-800 dark:text-rose-300">
+                  {isFarmOwner
+                    ? "Upgrade to keep using breeding, analytics, and other premium tools."
+                    : "Ask the farm owner to upgrade to keep using premium tools."}
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => router.push("/pricing")}
-              className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs sm:text-sm"
-            >
-              View Plans
-            </Button>
+            {isFarmOwner && (
+              <Button
+                onClick={() => router.push("/pricing")}
+                className="bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs sm:text-sm"
+              >
+                View Plans
+              </Button>
+            )}
           </div>
         )}
         {hasFarm ? (
@@ -454,70 +345,17 @@ const DashboardContent: React.FC = () => {
             >
               <TabsList
                 ref={tabsListRef}
-                key={activeTab}
-                className="inline-flex justify-start w-full md:grid md:grid-cols-9 overflow-x-auto scroll-smooth whitespace-nowrap bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent relative shadow-sm md:shadow-none"
+                className="inline-flex w-full justify-start overflow-x-auto scroll-smooth whitespace-nowrap bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent relative shadow-sm md:shadow-none"
               >
-                <TabsTrigger
-                  value="overview"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pens"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Pens
-                </TabsTrigger>
-                <TabsTrigger
-                  value="breeding"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Breeding
-                </TabsTrigger>
-                <TabsTrigger
-                  value="health"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Health
-                </TabsTrigger>
-                <TabsTrigger
-                  value="feeding"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Feeding
-                </TabsTrigger>
-                <TabsTrigger
-                  value="earnings"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Earnings
-                </TabsTrigger>
-                <TabsTrigger
-                  value="reports"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Reports
-                </TabsTrigger>
-                <TabsTrigger
-                  value="analytics"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Analytics
-                </TabsTrigger>
-                <TabsTrigger
-                  value="calender"
-                  className="flex-1 min-w-[70px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
-                >
-                  Calender
-                </TabsTrigger>
-                {/* <TabsTrigger
-                value="pricing"
-                className="flex-shrink-0 px-3 py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white whitespace-nowrap"
-                onClick={() => router.push("/pricing")}
-              >
-                Pricing
-              </TabsTrigger> */}
+                {visibleTabs.map(tab => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="flex-1 min-w-[76px] data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 text-xs sm:text-sm font-medium"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6 sm:space-y-8">
@@ -543,7 +381,13 @@ const DashboardContent: React.FC = () => {
                           </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("breeding")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("breeding")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Pregnant Sows</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg">
@@ -559,7 +403,13 @@ const DashboardContent: React.FC = () => {
                           </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("health")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("health")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Health Alerts</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg">
@@ -568,12 +418,20 @@ const DashboardContent: React.FC = () => {
                         </CardHeader>
                         <CardContent>
                           <div className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                            {alerts.filter((a) => a.type === "Medication Due").length}
+                            {(healthSummary?.overdue ?? 0) + (healthSummary?.due_this_week ?? 0)}
                           </div>
-                          <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">Medication due</p>
+                          <p className="text-xs text-muted-foreground dark:text-gray-400 mt-1">
+                            {healthSummary?.overdue ?? 0} overdue, {healthSummary?.due_this_week ?? 0} due this week
+                          </p>
                         </CardContent>
                       </Card>
-                      <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300">
+                      <Card
+                        className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActiveTab("pens")}
+                        onKeyDown={event => event.key === "Enter" && setActiveTab("pens")}
+                      >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-xs sm:text-sm font-medium dark:text-gray-200">Active Rows</CardTitle>
                           <div className="p-1.5 sm:p-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg">
@@ -590,56 +448,7 @@ const DashboardContent: React.FC = () => {
                         </CardContent>
                       </Card>
                     </div>
-                    <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 dark:border-gray-700/20">
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2 text-sm sm:text-base dark:text-gray-200">
-                          <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
-                          <span>Recent Alerts & Reminders</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3 sm:space-y-4">
-                          {alerts.map((alert, index) => (
-                            <div
-                              key={index}
-                              className={`flex items-center justify-between p-3 sm:p-4 rounded-xl border ${alert.variant === "destructive"
-                                ? "bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-800"
-                                : alert.variant === "secondary"
-                                  ? "bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 border-amber-200 dark:border-amber-800"
-                                  : "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800"
-                                }`}
-                            >
-                              <div>
-                                <p className="font-medium text-sm sm:text-base">
-                                  {alert.type === "Medication Due" ||
-                                    (alert.type === "Birth Expected" &&
-                                      alert.variant === "destructive") ? (
-                                    <span className="text-red-800 dark:text-red-300">
-                                      {alert.type}
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-800 dark:text-amber-300">{alert.type}</span>
-                                  )}
-                                </p>
-                                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                                  {penNamesConversion(pens, alert.message)}
-                                </p>
-                              </div>
-                              <Badge variant={alert.variant} className="text-xs">
-                                {alert.variant === "destructive"
-                                  ? "Overdue"
-                                  : alert.variant === "secondary"
-                                    ? "Upcoming"
-                                    : "Ready"}
-                              </Badge>
-                            </div>
-                          ))}
-                          {alerts.length === 0 && (
-                            <p className="text-gray-600 dark:text-gray-400 text-sm">No alerts at this time.</p>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <OverviewReminders onOpenTab={setActiveTab} />
                   </>
                 ) : (
                   <UpgradePrompt feature="Overview" />
@@ -652,11 +461,10 @@ const DashboardContent: React.FC = () => {
                       pens={pens}
                       pigs={pigs}
                       rows={rows}
-                      onPigSelect={setSelectedPig}
+                      onPigSelect={() => undefined}
                       onRowAdded={handleRowAdded}
                       handleAddRow={handleAddRow}
                     />
-                    {selectedPig && <PigProfile pig={selectedPig} onClose={() => setSelectedPig(null)} onTransferComplete={refreshPigsAndPens} />}
                   </>
                 ) : (
                   <UpgradePrompt feature="Pens" />
@@ -710,7 +518,7 @@ const DashboardContent: React.FC = () => {
               </TabsContent>
               <TabsContent value="calender">
                 {isFeatureAvailable("calender") ? (
-                  <Calendar events={events} pens={pens} />
+                  <Calendar />
                 ) : (
                   <UpgradePrompt feature="Calender" />
                 )}
@@ -745,6 +553,7 @@ const DashboardContent: React.FC = () => {
             </Card>
           </>
         )}
+        <LegalLinks className="mt-10" />
         <WhatsAppButton
           phoneNumber={process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? ''}
           message="Hi! I have a question about your services."
