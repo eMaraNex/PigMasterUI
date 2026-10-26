@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -40,10 +40,9 @@ import {
   Pie,
 } from "recharts"
 import { useCurrency } from "@/lib/currency-context"
-import type { Pig, EarningsRecord, Row, MonthlyEarning, HealthData, AgeGroup, FeedData, OccupancyData, WeightTrend, MortalityData, GenderData, BreedCount } from "@/types"
+import type { MonthlyEarning, HealthData, AgeGroup, FeedData, OccupancyData, WeightTrend, MortalityData, GenderData, BreedCount } from "@/types"
 import { useAuth } from "@/lib/auth-context"
-import axios from "axios"
-import * as utils from "@/lib/utils"
+import { useGetEarningsQuery, useGetPigsQuery, useGetRowsQuery, emptyList } from "@/lib/redux/api"
 
 const colors = {
   primary: ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#06b6d4"],
@@ -66,33 +65,16 @@ const colors = {
 export default function AnalyticsCharts() {
   const { user } = useAuth();
   const { formatAmount, convertToBaseCurrency } = useCurrency()
-  const [pigs, setPigs] = useState<Pig[]>([])
-  const [earnings, setEarnings] = useState<EarningsRecord[]>([])
   const [timeRange, setTimeRange] = useState("6months")
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  const token = localStorage.getItem("pig_farm_token") ?? "";
-
-  useEffect(() => {
-    loadData()
-  }, [user?.farm_id])
-
-  const loadData = async () => {
-    setLoading(true);
-    const farmId = user?.farm_id || "default-farm";
-    const tempPigsData = localStorage.getItem(`pig_farm_pigs_${farmId}`) ?? '';
-    const pigsData = JSON.parse(tempPigsData);
-    let fetchedEarnings;
-    if (user && farmId) {
-      const response = await axios.get(`${utils.apiUrl}/earnings/${farmId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      fetchedEarnings = response.data.data || [];
-    }
-    setPigs(pigsData)
-    setEarnings(fetchedEarnings)
-    setLoading(false)
-  }
+  const farmId = user?.farm_id ?? "";
+  const { data: pigs = emptyList(), isLoading: pigsLoading } = useGetPigsQuery(farmId, { skip: !farmId });
+  const { data: rows = emptyList() } = useGetRowsQuery(farmId, { skip: !farmId });
+  const { data: earnings = emptyList(), isLoading: earningsLoading } = useGetEarningsQuery(
+    { farmId },
+    { skip: !farmId },
+  );
+  const loading = pigsLoading || earningsLoading;
 
   const getTimeRangeData = () => {
     const now = new Date()
@@ -201,32 +183,19 @@ export default function AnalyticsCharts() {
     return Math.round((successfulBreedings / Math.max(totalAttempts, 1)) * 100)
   }
   const getPenOccupancy = (): OccupancyData[] => {
-    try {
-      const farmId = user?.farm_id || "default-farm";
-      const rowsData = JSON.parse(localStorage.getItem(`pig_farm_rows_${farmId}`) || '[]') as Row[];
-      const totalCapacity = rowsData.reduce((sum, row) => sum + row.capacity, 0);
-      const totalOccupied = rowsData.reduce((sum, row) => sum + row.occupied, 0);
-      return [
-        { name: "Occupied", value: totalOccupied, color: "#10b981" },
-        { name: "Available", value: totalCapacity - totalOccupied, color: "#3b82f6" },
-      ];
-    } catch (error) {
-      console.error("Error in getPenOccupancy:", error);
-      return [
-        { name: "Occupied", value: 0, color: "#10b981" },
-        { name: "Available", value: 0, color: "#3b82f6" },
-      ];
-    }
+    const totalCapacity = rows.reduce((sum, row) => sum + row.capacity, 0);
+    const totalOccupied = rows.reduce((sum, row) => sum + row.occupied, 0);
+    return [
+      { name: "Occupied", value: totalOccupied, color: "#10b981" },
+      { name: "Available", value: Math.max(0, totalCapacity - totalOccupied), color: "#3b82f6" },
+    ];
   };
 
   const getWeightTrends = (): WeightTrend[] => {
-    const farmId = user?.farm_id || "default-farm";
-    const tempPigsData = localStorage.getItem(`pig_farm_pigs_${farmId}`) ?? '[]';
-    const pigsData: Pig[] = JSON.parse(tempPigsData);
-    const breeds = [...new Set(pigsData.map((r) => r.breed))];
+    const breeds = [...new Set(pigs.map((r) => r.breed))];
     const finalData = breeds
       .map((breed) => {
-        const breedPigs = pigsData.filter((r) => r.breed === breed);
+        const breedPigs = pigs.filter((r) => r.breed === breed);
         const avgTempWeight = breedPigs.reduce((sum, r) => sum + parseFloat(String(r.weight)), 0) / Math.max(breedPigs.length, 1);
         const tempWeight = parseFloat(avgTempWeight.toFixed(1));
         return { breed, weight: tempWeight, count: breedPigs.length };

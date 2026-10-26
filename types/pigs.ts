@@ -21,20 +21,19 @@ export interface Pig {
   expected_birth_date?: string;
   total_litters?: number;
   total_piglets?: number;
-  healthRecords?: HealthRecord[];
-  feedingSchedule?: FeedingSchedule;
   created_at?: string;
   status?: "active" | "inactive" | "sold" | "removed";
   notes?: string;
   actual_birth_date?: string;
   pregnancy_start_date?: string;
   birth_history?: any[];
-  health_records?: any[];
+  health_records?: HealthRecord[];
   feeding_schedule?: {
     daily_amount: string | number;
     feed_type: string;
     times: string[];
     last_fed: string;
+    special_diet?: string | null;
   };
 }
 

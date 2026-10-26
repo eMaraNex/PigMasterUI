@@ -1,13 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { apiRequest } from "@/lib/api/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, Crown, Zap, Star, ArrowLeft } from "lucide-react"
-import PaymentModal from "@/components/subscription/payment-modal"
+import { Check, Crown, Zap, Star } from "lucide-react"
+import PageShell from "@/components/shared/page-shell"
+import Link from "next/link"
+import FaqList from "@/components/faq/faq-list"
+import { PRICING_FAQS } from "@/lib/faqs"
 import ProtectedRoute from "@/components/auth/protected-route"
-import { useRouter } from "next/navigation"
 import { useSubscription } from "@/lib/subscription-context"
 import TillPaymentModal from "@/components/subscription/till-payment-modal";
 
@@ -74,11 +77,75 @@ const plans = [
     },
 ]
 
+type Period = "monthly" | "yearly"
+type Quote = { amount: number; currency: string; durationMonths: number }
+// Matches the server: yearly = 12 months with 16% off (the server is the source of truth for prices).
+const YEARLY_DISCOUNT_PCT = 16
+
+const formatKes = (amount: number) => `KSh ${Math.round(amount).toLocaleString("en-KE")}`
+
+/** Price block: monthly price, or the yearly total with its monthly equivalent and saving. */
+function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; period: Period; quotes: Record<string, Quote> }) {
+    if (plan.price === 0) {
+        return (
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">Free</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">forever</span>
+            </div>
+        )
+    }
+    const monthly = quotes[`${plan.id}:monthly`]
+    const yearly = quotes[`${plan.id}:yearly`]
+    if (!monthly || !yearly) return <div className="mx-auto h-10 w-32 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+    if (period === "monthly") {
+        return (
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(monthly.amount)}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">/ month</span>
+            </div>
+        )
+    }
+    const saving = monthly.amount * 12 - yearly.amount
+    return (
+        <div className="space-y-1">
+            <div className="flex items-baseline justify-center gap-1">
+                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(yearly.amount)}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">/ year</span>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+                <span className="mr-1 text-gray-400 line-through">{formatKes(monthly.amount * 12)}</span>
+                ≈ {formatKes(yearly.amount / 12)} / month
+            </p>
+            {saving > 0 && (
+                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-200">
+                    You save {formatKes(saving)}
+                </Badge>
+            )}
+        </div>
+    )
+}
+
 function PricingContent() {
-    const router = useRouter()
-    const { tier, upgradeTo } = useSubscription()
+    const { tier, upgradeTo, isTrialActive, billingPeriod } = useSubscription()
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
     const [showPayment, setShowPayment] = useState(false)
+    const [period, setPeriod] = useState<Period>("monthly")
+    // Renewing customers see their current cycle first.
+    useEffect(() => {
+        if (billingPeriod) setPeriod(billingPeriod)
+    }, [billingPeriod])
+    const [quotes, setQuotes] = useState<Record<string, Quote>>({})
+
+    // Real KES prices for both billing periods, straight from the server.
+    useEffect(() => {
+        const paid = plans.filter(plan => plan.price > 0)
+        Promise.all(paid.flatMap(plan => (["monthly", "yearly"] as Period[]).map(async billing => {
+            const response = await apiRequest.get("/payments/quote", { params: { plan: plan.id, period: billing } })
+            return [`${plan.id}:${billing}`, response.data.data as Quote] as const
+        })))
+            .then(entries => setQuotes(Object.fromEntries(entries)))
+            .catch(() => setQuotes({}))
+    }, [])
 
     const handleSelectPlan = (planId: string) => {
         if (planId === "free") {
@@ -97,35 +164,41 @@ function PricingContent() {
     }
 
     return (
-        <div className="px-4 py-6 sm:px-6 lg:px-8 min-h-screen">
-            <div className="max-w-7xl mx-auto space-y-8">
-                {/* Header with Back Button */}
-                <div className="flex items-center justify-between mb-4">
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.back()}
-                        className="p-2 touch:p-3 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                        <span className="ml-2 hidden sm:inline">Back</span>
-                    </Button>
-                    <div className="text-center">
-                        <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                            Choose Your Plan
-                        </h1>
-                        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-2 max-w-3xl mx-auto">
-                            Scale your pig farm management with the right plan for your needs. Start free and upgrade as you grow.
-                        </p>
-                        <div className="flex items-center justify-center mt-4">
-                            <Badge
-                                variant="outline"
-                                className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 text-xs sm:text-sm"
+        <PageShell
+            title="Plans & pricing"
+            description="Start with a free trial and upgrade as your farm grows. Pay with M-Pesa."
+            width="xl"
+            actions={
+                <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
+                    Current plan: {isTrialActive ? "Trial" : tier.charAt(0).toUpperCase() + tier.slice(1)}
+                </Badge>
+            }
+        >
+            <div className="space-y-8">
+                {/* Billing period */}
+                <div className="flex flex-col items-center gap-2">
+                    <div role="radiogroup" aria-label="Billing period" className="inline-flex rounded-full border bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        {(["monthly", "yearly"] as Period[]).map(option => (
+                            <button
+                                key={option}
+                                type="button"
+                                role="radio"
+                                aria-checked={period === option}
+                                onClick={() => setPeriod(option)}
+                                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition ${period === option ? "bg-gradient-to-r from-green-600 to-blue-600 text-white shadow" : "text-gray-600 hover:text-gray-900 dark:text-gray-300"}`}
                             >
-                                Current Plan: {tier.toUpperCase()}
-                            </Badge>
-                        </div>
+                                {option === "monthly" ? "Pay monthly" : "Pay yearly"}
+                                {option === "yearly" && (
+                                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${period === "yearly" ? "bg-white/25 text-white" : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"}`}>
+                                        Save {YEARLY_DISCOUNT_PCT}%
+                                    </span>
+                                )}
+                            </button>
+                        ))}
                     </div>
-                    <div className="w-8 sm:w-10" /> {/* Spacer for alignment */}
+                    <p className="text-xs text-gray-500">
+                        {period === "yearly" ? "One M-Pesa payment covers 12 months. Nothing renews automatically." : "Pay each month with M-Pesa. Nothing renews automatically."}
+                    </p>
                 </div>
 
                 {/* Pricing Cards */}
@@ -164,10 +237,7 @@ function PricingContent() {
                                     </div>
                                     <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{plan.name}</CardTitle>
                                     <div className="space-y-2">
-                                        <div className="flex items-baseline justify-center space-x-1">
-                                            <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100">${plan.price}</span>
-                                            <span className="text-sm sm:text-base text-gray-600 dark:text-gray-300">/{plan.period}</span>
-                                        </div>
+                                        <PlanPrice plan={plan} period={period} quotes={quotes} />
                                         <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">{plan.description}</p>
                                     </div>
                                 </CardHeader>
@@ -221,52 +291,26 @@ function PricingContent() {
                 </div>
 
                 {/* FAQ Section */}
-                <div className="max-w-4xl mx-auto">
-                    <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-0 shadow-xl">
-                        <CardHeader>
-                            <CardTitle className="text-center text-xl sm:text-2xl text-gray-900 dark:text-gray-100">Frequently Asked Questions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6 px-4 sm:px-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Can I change plans anytime?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">What payment methods do you accept?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        We accept M-Pesa, Stripe (credit/debit cards), and PayPal for your convenience.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Is there a free trial?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Our Free plan is available forever with no time limits. Upgrade when you're ready to scale.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-sm sm:text-base text-gray-700 dark:text-gray-200 mb-2">Do you offer refunds?</h4>
-                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                                        Yes, we offer a 30-day money-back guarantee for all paid plans. No questions asked.
-                                    </p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                <section className="mx-auto max-w-3xl space-y-4" aria-labelledby="pricing-faq">
+                    <div className="text-center">
+                        <h2 id="pricing-faq" className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">Plans & payments FAQ</h2>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            More answers in the <Link href="/faq" className="text-blue-600 underline dark:text-blue-400">help centre</Link>.
+                        </p>
+                    </div>
+                    <FaqList categories={[{ id: "plans", title: "Plans & payments", items: PRICING_FAQS }]} showSearch={false} />
+                </section>
             </div>
 
             {/* Payment Modal */}
             {showPayment && selectedPlan && (
                 <TillPaymentModal
-                    plan={plans.find((p) => p.id === selectedPlan)!}
+                    plan={{ ...plans.find((p) => p.id === selectedPlan)!, period }}
                     onSuccess={() => handlePaymentSuccess(selectedPlan)}
                     onClose={() => setShowPayment(false)}
                 />
             )}
-        </div>
+        </PageShell>
     )
 }
 

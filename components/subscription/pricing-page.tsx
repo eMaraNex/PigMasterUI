@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
+import FaqList from "@/components/faq/faq-list"
+import { PRICING_FAQS } from "@/lib/faqs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -223,42 +226,16 @@ export default function PricingPage() {
                     })}
                 </div>
 
-                {/* FAQ Section */}
-                <div className="max-w-4xl mx-auto">
-                    <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-0 shadow-xl">
-                        <CardHeader>
-                            <CardTitle className="text-center text-2xl">Frequently Asked Questions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 className="font-semibold mb-2">Can I change plans anytime?</h4>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2">What payment methods do you accept?</h4>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        We accept M-Pesa, Stripe (credit/debit cards), and PayPal for your convenience.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2">Is there a free trial?</h4>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        Our Free plan is available forever with no time limits. Upgrade when you're ready to scale.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2">Do you offer refunds?</h4>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        Yes, we offer a 30-day money-back guarantee for all paid plans. No questions asked.
-                                    </p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                {/* FAQ Section: same questions and answers as the help centre (lib/faqs.ts) */}
+                <section className="mx-auto max-w-3xl space-y-4" aria-labelledby="pricing-faq">
+                    <div className="text-center">
+                        <h2 id="pricing-faq" className="text-2xl font-bold text-gray-900 dark:text-white">Plans & payments FAQ</h2>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            More answers in the <Link href="/faq" className="text-blue-600 underline dark:text-blue-400">help centre</Link>.
+                        </p>
+                    </div>
+                    <FaqList categories={[{ id: "plans", title: "Plans & payments", items: PRICING_FAQS }]} showSearch={false} />
+                </section>
             </div>
 
             {/* Payment Modal */}

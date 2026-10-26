@@ -23,6 +23,7 @@ import { Mail, Lock, User, Phone, Eye, EyeOff, PiggyBank } from "lucide-react";
 import { useAuth } from "../../../lib/auth-context";
 import ThemeToggle from "../../../components/theme-toggle";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/toast-provider";
 
@@ -61,7 +62,6 @@ export default function RegisterPage() {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const { showError, showSuccess } = useToast();
-  const currentYear = new Date().getFullYear();
 
   // Real-time validation function
   const validateField = (field: keyof FormData, value: string): string | null => {
@@ -173,7 +173,7 @@ export default function RegisterPage() {
   const handleGoogleRegister = async (): Promise<void> => {
     setIsLoading(true);
     try {
-      const response = await googleAuth();
+      const response = await googleAuth({ marketingConsent });
       if (response.success) {
         showSuccess('Success', response.message);
       } else {
@@ -269,6 +269,11 @@ export default function RegisterPage() {
               </svg>
               {isLoading ? "Registering..." : "Continue with Google"}
             </Button>
+            <p className="-mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+              By continuing with Google you agree to our{" "}
+              <Link href="/terms" className="underline underline-offset-2 hover:text-gray-800 dark:hover:text-gray-200">Terms of Service</Link> and{" "}
+              <Link href="/privacy-policy" className="underline underline-offset-2 hover:text-gray-800 dark:hover:text-gray-200">Privacy Policy</Link>.
+            </p>
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -425,7 +430,7 @@ export default function RegisterPage() {
                     className="mt-1 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
                   />
                   <span>
-                    I agree to the <Link href="/privacy-policy" className="font-medium text-blue-600 underline underline-offset-2 dark:text-blue-400">Privacy Policy</Link> and consent to the processing of my data for account operation, service analysis, and marketing communications as described in the policy.
+                    I agree to the <Link href="/terms" target="_blank" className="font-medium text-blue-600 underline underline-offset-2 dark:text-blue-400">Terms of Service</Link> and have read the <Link href="/privacy-policy" target="_blank" className="font-medium text-blue-600 underline underline-offset-2 dark:text-blue-400">Privacy Policy</Link>, which explains how my account and farm data are used. <span className="text-red-500">*</span>
                   </span>
                 </label>
                 <label className="flex items-start gap-3">
@@ -435,7 +440,7 @@ export default function RegisterPage() {
                     onChange={(e) => setMarketingConsent(e.target.checked)}
                     className="mt-1 h-4 w-4 rounded border-slate-300 text-green-600 focus:ring-green-500"
                   />
-                  <span>I am happy to receive product updates, promotions, and farm insights via email or SMS.</span>
+                  <span>Optional: send me farming tips, product news and offers by email or SMS. I can unsubscribe at any time.</span>
                 </label>
               </div>
 
@@ -517,7 +522,7 @@ export default function RegisterPage() {
         </Dialog>
 
         <div className="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
-          <p>© {currentYear} Pig Farming. All rights reserved.</p>
+          <LegalLinks />
         </div>
       </div>
     </div>

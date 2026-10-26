@@ -2,10 +2,8 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
-import { roles } from "./constants";
 import { useAuth } from "./auth-context";
-import { apiUrl, getFarmTrialInfo, type TrialInfo } from "./utils";
+import { useGetSubscriptionQuery } from "./redux/api";
 
 type SubscriptionTier = "free" | "standard" | "advanced" | "admin" | "superadmin"
 
@@ -17,6 +15,12 @@ interface SubscriptionLimits {
 }
 
 interface SubscriptionContextType {
+    /** False until the API has answered; nothing is locked or nagged before that. */
+    ready: boolean
+    /** Team members use the owner's plan and cannot manage billing. */
+    isFarmOwner: boolean
+    /** Billing cycle of the active paid plan (null on trial / free). */
+    billingPeriod: "monthly" | "yearly" | null
     tier: SubscriptionTier
     limits: SubscriptionLimits
     isFeatureAvailable: (feature: string) => boolean
@@ -102,152 +106,76 @@ const normalizeTier = (value: unknown): SubscriptionTier => {
     if (["superadmin", "super-admin", "super_admin"].includes(normalized)) return "superadmin";
     if (["advanced", "premium", "pro"].includes(normalized)) return "advanced";
     if (["standard", "starter"].includes(normalized)) return "standard";
-    if (["free", "trial"].includes(normalized)) return "free";
     return "free";
 };
 
-const isActivePaidSubscription = (subscription: any): boolean => {
-    if (!subscription) return false;
-
-    const planName = String(subscription.current_plan || subscription.plan_name || subscription.plan || subscription.tier || "").trim();
-    const status = String(subscription.status || subscription.payment_status || "").trim().toLowerCase();
-    const expiryDate = subscription.expiry_date || subscription.subscription_end || null;
-    const isNotExpired = !expiryDate || new Date(expiryDate).getTime() > Date.now();
-    const isPaidPlan = planName !== "" && normalizeTier(planName) !== "free";
-    const isActiveStatus = status === "active" || status === "paid" || status === "trial" === false;
-
-    return Boolean(isPaidPlan && isActiveStatus && isNotExpired);
-};
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined)
 
+/**
+ * Plan and trial state come from the API (/subscriptions/me), which already resolves
+ * team members to the farm owner's plan. Nothing is decided until that answer arrives
+ * (`ready`), so paid farms never see a "trial ended" flash or an upgrade prompt.
+ */
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const [tier, setTier] = useState<SubscriptionTier>("free");
-    const [subscriptionEndsAt, setSubscriptionEndsAt] = useState<string | null>(null);
-    const [trialInfo, setTrialInfo] = useState<TrialInfo>({
-        isTrialActive: false,
-        trialEndsAt: null,
-        trialDaysLeft: 0,
+    const { data, isLoading, isError, refetch } = useGetSubscriptionQuery(undefined, {
+        skip: !user,
+        pollingInterval: 5 * 60 * 1000,
+        refetchOnFocus: true,
     });
-
-    const refreshSubscription = async () => {
-        const token = localStorage.getItem("pig_farm_token");
-
-        if (!user || !token) {
-            const fallbackRole = user?.role_id ? parseInt(user.role_id, 10) : undefined;
-            if (fallbackRole && !isNaN(fallbackRole) && roles[fallbackRole]) {
-                setTier(normalizeTier(roles[fallbackRole].name));
-            } else {
-                setTier("free");
-            }
-            setSubscriptionEndsAt(null);
-            return;
-        }
-
-        try {
-            const response = await axios.get(`${apiUrl}/subscriptions/me`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-
-            const subscription = response.data?.data;
-            const planFromApi = subscription?.current_plan || subscription?.plan_name || subscription?.plan || subscription?.tier;
-            const expiryDate = subscription?.expiry_date || subscription?.subscription_end || user?.subscription_end || null;
-
-            const paidPlanActive = isActivePaidSubscription(subscription);
-
-            if (paidPlanActive && planFromApi) {
-                setTier(normalizeTier(planFromApi));
-                setSubscriptionEndsAt(expiryDate || null);
-                return;
-            }
-
-            if (expiryDate && new Date(expiryDate).getTime() > Date.now()) {
-                const fallbackTier = normalizeTier(planFromApi || user?.subscription_plan || user?.role_id ? roles[Number(user.role_id)]?.name : undefined);
-                setTier(fallbackTier === "free" ? "free" : fallbackTier);
-                setSubscriptionEndsAt(expiryDate);
-                return;
-            }
-
-            setTier("free");
-            setSubscriptionEndsAt(expiryDate || null);
-        } catch (error) {
-            console.warn("Failed to fetch subscription state:", error);
-            const fallbackRole = user?.role_id ? parseInt(user.role_id, 10) : undefined;
-            if (fallbackRole && !isNaN(fallbackRole) && roles[fallbackRole]) {
-                setTier(normalizeTier(roles[fallbackRole].name));
-            } else {
-                setTier("free");
-            }
-            setSubscriptionEndsAt(null);
-        }
-    };
-
+    const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
-        const updateTrialInfo = () => {
-            const info = getFarmTrialInfo();
-            setTrialInfo(info);
-        };
-
-        updateTrialInfo();
-        refreshSubscription();
-
-        const interval = window.setInterval(() => {
-            updateTrialInfo();
-            refreshSubscription();
-        }, 60 * 1000);
-
+        const interval = window.setInterval(() => setNow(Date.now()), 60 * 1000);
         return () => window.clearInterval(interval);
-    }, [user]);
+    }, []);
 
-    const isPaidSubscriptionActive = tier !== "free" && subscriptionEndsAt ? new Date(subscriptionEndsAt).getTime() > Date.now() : false;
-    const effectiveTrialActive = !isPaidSubscriptionActive && trialInfo.isTrialActive;
-    const effectiveTier = isPaidSubscriptionActive ? tier : "free";
+    const ready = Boolean(user) && !isLoading && (data !== undefined || isError);
+    const expiry = data?.expiry_date ?? null;
+    const paidActive = Boolean(data?.has_active_subscription) && data?.status !== "trial";
+    const tier: SubscriptionTier = paidActive ? normalizeTier(data?.current_plan ?? data?.plan_name) : "free";
+    const effectiveTier: SubscriptionTier = paidActive && tier === "free" ? "standard" : tier;
+    const trialEndsAt = data?.trial_ends_at ?? data?.trial_end_date ?? null;
+    const isTrialActive = !paidActive && Boolean(data?.is_trial_active);
+    const trialDaysLeft = isTrialActive && trialEndsAt ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now) / DAY_MS)) : 0;
+    const fullAccess = isTrialActive || !ready;
 
-    const isFeatureAvailable = (feature: string): boolean => {
-        if (effectiveTrialActive) {
-            return true;
-        }
-        return featureMatrix[effectiveTier].includes(feature)
-    }
+    const limits = fullAccess ? subscriptionLimits.advanced : subscriptionLimits[effectiveTier];
+
+    // Until the plan is known nothing is locked; screens show their own loading states.
+    const isFeatureAvailable = (feature: string): boolean => fullAccess || featureMatrix[effectiveTier].includes(feature);
 
     const canAddMore = (type: string, current: number): boolean => {
-        if (effectiveTrialActive) {
-            return true;
-        }
+        if (fullAccess) return true;
         const key = `max${type.charAt(0).toUpperCase() + type.slice(1)}` as keyof SubscriptionLimits;
         const limit = limits[key];
         return limit === -1 || current < limit
     }
 
-    const upgradeTo = (newTier: SubscriptionTier) => {
-        setTier(newTier)
-        setSubscriptionEndsAt(null)
-        console.log(`Upgraded to ${newTier} tier`)
-    }
-
     const getNextTier = (): SubscriptionTier | null => {
-        if (tier === "free") return "standard";
-        if (tier === "standard") return "advanced";
+        if (effectiveTier === "free") return "standard";
+        if (effectiveTier === "standard") return "advanced";
         return null;
     }
-
-    const limits = effectiveTrialActive ? subscriptionLimits.advanced : subscriptionLimits[effectiveTier]
 
     return (
         <SubscriptionContext.Provider
             value={{
+                ready,
                 tier: effectiveTier,
                 limits,
                 isFeatureAvailable,
                 canAddMore,
-                upgradeTo,
+                upgradeTo: () => { void refetch(); },
                 getNextTier,
-                isTrialActive: effectiveTrialActive,
-                trialEndsAt: trialInfo.trialEndsAt,
-                trialDaysLeft: trialInfo.trialDaysLeft,
-                subscriptionEndsAt,
-                refreshSubscription,
+                isTrialActive,
+                trialEndsAt,
+                trialDaysLeft,
+                subscriptionEndsAt: paidActive ? expiry : null,
+                isFarmOwner: data?.is_farm_owner !== false,
+                billingPeriod: paidActive ? data?.billing_period ?? "monthly" : null,
+                refreshSubscription: async () => { await refetch(); },
             }}
         >
             {children}

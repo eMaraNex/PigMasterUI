@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import axios from "axios"
+import { apiRequest as axios } from "@/lib/api/client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,8 +10,13 @@ import { Loader2, Check, AlertCircle, Smartphone } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as utils from "@/lib/utils"
 
-const POLL_INTERVAL_MS = 4000
-const POLL_TIMEOUT_MS = 120_000 // 2 minutes
+// Customers may first see a Fuliza offer and then the PIN screen, which can take a few
+// minutes. The server never calls a payment failed before ~3 minutes unless the customer
+// cancels, so the modal waits a little longer and then keeps checking quietly.
+const POLL_INTERVAL_MS = 3000
+const ACTIVE_WAIT_MS = 4 * 60_000
+const BACKGROUND_POLL_MS = 15_000
+const BACKGROUND_WAIT_MS = 10 * 60_000
 
 interface TillPaymentModalProps {
     plan: {
@@ -24,7 +29,7 @@ interface TillPaymentModalProps {
     onClose: () => void
 }
 
-type Step = "form" | "waiting" | "success" | "failed"
+type Step = "form" | "waiting" | "processing" | "success" | "failed"
 
 export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPaymentModalProps) {
     const [step, setStep] = useState<Step>("form")
@@ -35,77 +40,74 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     const { toast } = useToast()
 
     const pollRef = useRef<NodeJS.Timeout | null>(null)
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const startedAt = useRef(0)
+    const [elapsed, setElapsed] = useState(0)
 
     const isPhoneValid = /^\+2547\d{8}$/.test(phoneNumber) || /^\+2541\d{8}$/.test(phoneNumber)
 
     // Compute amount + dates
     const startDate = new Date()
     const endDate = new Date(startDate)
-    if (plan.period === "yearly") {
+    const isYearly = plan.period === "yearly"
+    if (isYearly) {
         endDate.setFullYear(endDate.getFullYear() + 1)
     } else {
         endDate.setMonth(endDate.getMonth() + 1)
     }
 
+    // Exact amount M-Pesa will charge, shown before the prompt is sent.
+    const [quote, setQuote] = useState<{ amount: number } | null>(null)
+    useEffect(() => {
+        axios.get(`${utils.apiUrl}/payments/quote`, { params: { plan: plan.id, period: isYearly ? "yearly" : "monthly" } })
+            .then(res => setQuote(res.data?.data ?? null))
+            .catch(() => setQuote(null))
+    }, [plan.id, isYearly])
+
     const stopPolling = () => {
-        if (pollRef.current) clearInterval(pollRef.current)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        if (pollRef.current) clearTimeout(pollRef.current)
+        pollRef.current = null
     }
 
     useEffect(() => () => stopPolling(), [])
 
+    const finishSuccess = () => {
+        stopPolling()
+        setStep("success")
+        setTimeout(() => {
+            window.location.reload()
+            onSuccess(plan.id)
+        }, 1500)
+    }
+
+    /**
+     * Polls the payment until M-Pesa gives a definitive answer. Only the server decides
+     * "failed"; running out of time here never does, because the customer may still be
+     * finishing on the phone (Fuliza, PIN) and a late confirmation still activates the plan.
+     */
     const startPolling = (id: string) => {
-        const token = localStorage.getItem("pig_farm_token")
-
-        pollRef.current = setInterval(async () => {
+        startedAt.current = Date.now()
+        const tick = async () => {
+            const waited = Date.now() - startedAt.current
+            setElapsed(waited)
             try {
-                const res = await axios.get(`${utils.apiUrl}/payments/${id}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
+                const res = await axios.get(`${utils.apiUrl}/payments/${id}`)
                 const payment = res.data?.data
-
-                if (payment?.status === "success") {
+                if (payment?.status === "success" || payment?.mpesa_receipt_number) return finishSuccess()
+                if (payment?.status === "failed") {
                     stopPolling()
-                    setStep("success")
-                    setTimeout(() => {
-                        window.location.reload();
-                        onSuccess(plan.id);
-                    }, 1500)
-                } else if (payment?.status === "failed") {
-                    // Only show failed if there's NO receipt — if there's a receipt,
-                    // money was taken but activation failed, treat as success
-                    if (payment?.metadata?.mpesa_receipt) {
-                        stopPolling()
-                        setStep("success")
-                        setTimeout(() => {
-                            window.location.reload();
-                            onSuccess(plan.id);
-                        }, 1500)
-                    } else {
-                        stopPolling()
-                        setStatusMessage(
-                            payment?.metadata?.callback_error || "Payment was declined or cancelled."
-                        )
-                        setStep("failed")
-                    }
+                    setStatusMessage(payment?.failure_reason || "M-Pesa did not complete the payment.")
+                    setStep("failed")
+                    return
                 }
             } catch (err) {
+                // Network blips: keep checking.
                 console.warn("Poll error:", err)
             }
-        }, POLL_INTERVAL_MS)
-
-        timeoutRef.current = setTimeout(() => {
-            stopPolling()
-            // Check the step via ref to avoid stale closure
-            setStep((current) => {
-                if (current === "waiting") {
-                    setStatusMessage("Payment timed out. Please try again.")
-                    return "failed"
-                }
-                return current
-            })
-        }, POLL_TIMEOUT_MS)
+            if (waited > ACTIVE_WAIT_MS + BACKGROUND_WAIT_MS) return stopPolling()
+            if (waited > ACTIVE_WAIT_MS) setStep(current => (current === "waiting" ? "processing" : current))
+            pollRef.current = setTimeout(tick, waited > ACTIVE_WAIT_MS ? BACKGROUND_POLL_MS : POLL_INTERVAL_MS)
+        }
+        pollRef.current = setTimeout(tick, POLL_INTERVAL_MS)
     }
 
     const handleSubmit = async () => {
@@ -113,29 +115,33 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
         setSubmitting(true)
 
         try {
-            const token = localStorage.getItem("pig_farm_token")
             const normalizedPhone = phoneNumber.replace("+", "") // 254...
+            const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
+                params: { plan: plan.id, period: plan.period === "yearly" ? "yearly" : "monthly" },
+            })
+            const quote = quoteResponse.data?.data
+            if (!quote || typeof quote.amount !== "number" || !quote.currency) {
+                throw new Error("The server returned an invalid payment quote.")
+            }
 
             const payload = {
                 plan: plan.id,
-                amount: plan.price,
-                currency: "KES",
+                amount: quote.amount,
+                currency: quote.currency,
                 payment_mode: "mpesa",
                 phone_number: normalizedPhone,
                 tier: plan.name,
                 metadata: {
                     plan_period: plan.period === "yearly" ? "yearly" : "monthly", // ← fix here
                     initiated_from: "till_modal",
-                    duration: plan.period === "yearly" ? "1 year" : "1 month",
                     subscription_startdate: startDate.toISOString().split("T")[0],
                     subscription_enddate: endDate.toISOString().split("T")[0],
-                    original_amount: plan.price,
-                    original_currency: "USD",
+                    duration_months: quote.durationMonths,
                 },
             }
 
             const res = await axios.post(`${utils.apiUrl}/payments`, payload, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { "Idempotency-Key": crypto.randomUUID() },
             })
 
             const created = res.data?.data
@@ -163,9 +169,12 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 <DialogHeader>
                     <DialogTitle className="text-center">Pay with M-Pesa</DialogTitle>
                     <div className="text-center space-y-1">
-                        <p className="text-lg font-semibold">{plan.name} Plan</p>
+                        <p className="text-lg font-semibold">{plan.name} plan · {isYearly ? "yearly" : "monthly"}</p>
                         <p className="text-2xl font-bold text-blue-600">
-                            ${plan.price.toFixed(2)} USD /{plan.period}
+                            {quote ? `KSh ${quote.amount.toLocaleString("en-KE")}` : "…"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            {isYearly ? `Covers 12 months, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : `Covers 1 month, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
                         </p>
                     </div>
                 </DialogHeader>
@@ -217,12 +226,32 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 {step === "waiting" && (
                     <div className="text-center space-y-4 py-6">
                         <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
-                        <p className="font-semibold">Waiting for payment…</p>
+                        <p className="font-semibold">Waiting for M-Pesa…</p>
                         <p className="text-sm text-gray-500">
                             Check your phone for the M-Pesa prompt and enter your PIN to confirm.
                         </p>
+                        {elapsed > 20_000 && (
+                            <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+                                If M-Pesa offers Fuliza, accept it and then enter your PIN. Take your time; we keep waiting for M-Pesa&apos;s answer.
+                            </p>
+                        )}
                         <Button variant="outline" className="w-full" onClick={handleClose}>
                             Cancel
+                        </Button>
+                    </div>
+                )}
+
+                {/* ── STILL PROCESSING ── */}
+                {step === "processing" && (
+                    <div className="text-center space-y-4 py-6">
+                        <Loader2 className="h-10 w-10 animate-spin text-amber-500 mx-auto" />
+                        <p className="font-semibold">Still waiting for M-Pesa to confirm</p>
+                        <p className="text-sm text-gray-500">
+                            If you completed the payment on your phone, your plan activates automatically as soon as M-Pesa confirms it.
+                            You can close this window; please don&apos;t pay again.
+                        </p>
+                        <Button variant="outline" className="w-full" onClick={handleClose}>
+                            Close
                         </Button>
                     </div>
                 )}
@@ -244,8 +273,11 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                         <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
                             <AlertCircle className="h-6 w-6 text-red-600" />
                         </div>
-                        <p className="font-semibold">Payment failed</p>
+                        <p className="font-semibold">Payment not completed</p>
                         <p className="text-sm text-gray-500">{statusMessage}</p>
+                        <p className="text-xs text-gray-500">
+                            If M-Pesa did take the money, your plan still activates automatically once M-Pesa confirms it. Check Settings → Billing before paying again.
+                        </p>
                         <div className="flex gap-2">
                             <Button variant="outline" className="flex-1" onClick={handleClose}>
                                 Close

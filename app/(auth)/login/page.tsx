@@ -23,6 +23,7 @@ import {Mail, Lock, Eye, EyeOff, PiggyBank } from "lucide-react";
 import { useAuth } from "../../../lib/auth-context";
 import ThemeToggle from "../../../components/theme-toggle";
 import Link from "next/link";
+import LegalLinks from "@/components/legal/legal-links";
 import { useToast } from "@/lib/toast-provider";
 
 interface LoginFormData {
@@ -47,7 +48,6 @@ export default function LoginPage() {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const { showError, showSuccess } = useToast();
-  const currentYear = new Date().getFullYear();
 
   const validateField = (field: keyof LoginFormData | 'forgot_email', value: string): string | null => {
     switch (field) {
@@ -252,6 +252,11 @@ export default function LoginPage() {
               </svg>
               {isGoogleLoading ? "Signing in..." : "Continue with Google"}
             </Button>
+            <p className="-mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+              By continuing with Google you agree to our{" "}
+              <Link href="/terms" className="underline underline-offset-2 hover:text-gray-800 dark:hover:text-gray-200">Terms of Service</Link> and{" "}
+              <Link href="/privacy-policy" className="underline underline-offset-2 hover:text-gray-800 dark:hover:text-gray-200">Privacy Policy</Link>.
+            </p>
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -412,7 +417,7 @@ export default function LoginPage() {
         </Dialog>
 
         <div className="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
-          <p>© {currentYear} Pig Farming. All rights reserved.</p>
+          <LegalLinks />
         </div>
       </div>
     </div>

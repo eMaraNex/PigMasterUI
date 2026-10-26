@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import axios from 'axios';
+import { apiRequest as axios } from '@/lib/api/client';
 import * as utils from "@/lib/utils";
 import { Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/lib/toast-provider';

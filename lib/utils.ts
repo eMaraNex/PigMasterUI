@@ -8,36 +8,18 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Generate sequential pig IDs based on farm name
-export function generatePigId(farmId: string): string {
-  const tempFarm = localStorage.getItem("pig_farm_data") ?? "";
-  const farmDetails = tempFarm ? JSON.parse(tempFarm) : {};
-  const farmData = farmDetails.id === farmId ? farmDetails : null;
-  const farmName = farmData?.name ?? "Default";
-  const words = farmName.trim().split(/\s+/);
+export function generatePigId(farmId: string, farmName = "Default", pigs: Pig[] = []): string {
+  const words = (farmName || farmId || "Default").trim().split(/\s+/);
   let prefix = "";
   if (words.length >= 2) {
     prefix = `${words[0][0]}${words[1][0]}`.toUpperCase();
   } else {
     prefix = words[0][0].toUpperCase();
   }
-  const cachedPigs = localStorage.getItem(`pig_farm_pigs_${farmId}`);
-  let existingIds: number[] = [];
-  if (cachedPigs) {
-    try {
-      const pigs = JSON.parse(cachedPigs) as Pig[];
-      existingIds = pigs
-        .filter((pig: Pig) => pig.pig_id && pig.pig_id.startsWith(`${prefix}-`))
-        .map((pig: Pig) => {
-          const idNum = pig.pig_id
-            ? Number.parseInt(pig.pig_id.replace(`${prefix}-`, ""))
-            : 0;
-          return idNum;
-        })
-        .filter((id: number) => !isNaN(id));
-    } catch (error) {
-      console.error(`Error parsing pigs for farm ${farmName}:`, error);
-    }
-  }
+  const existingIds = pigs
+    .filter(pig => pig.pig_id?.startsWith(`${prefix}-`))
+    .map(pig => Number.parseInt(pig.pig_id?.replace(`${prefix}-`, "") ?? "", 10))
+    .filter(id => Number.isFinite(id));
 
   const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
   let nextId = maxId + 1;
@@ -80,9 +62,8 @@ export function isBreedingReady(pig: any): boolean {
 const normalizeUrl = (url: string | undefined) => (url ?? "").replace(/\/$/, "");
 
 export const baseUrl =
-  process.env.NODE_ENV === "production"
-    ? process.env.NEXT_PUBLIC_API_URL ?? ""
-    : "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:5000");
 export const apiUrl = `${normalizeUrl(baseUrl)}/api/v1`;
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -108,7 +89,10 @@ const defaultTrialInfo: TrialInfo = {
   trialDaysLeft: 0,
 };
 
-export const getFarmTrialInfo = (): TrialInfo => {
+export const getFarmTrialInfo = (user?: {
+  created_at?: string;
+  subscription_end?: string;
+} | null): TrialInfo => {
   if (typeof window === "undefined") {
     return defaultTrialInfo;
   }
@@ -117,16 +101,8 @@ export const getFarmTrialInfo = (): TrialInfo => {
     let createdAt: string | null = null;
     let subscriptionEndAt: string | null = null;
 
-    const userDataRaw = localStorage.getItem("pig_farm_user");
-    if (userDataRaw) {
-      try {
-        const userData = JSON.parse(userDataRaw);
-        createdAt = userData?.created_at ?? null;
-        subscriptionEndAt = userData?.subscription_end ?? null;
-      } catch (error) {
-        console.error("Failed to parse user data:", error);
-      }
-    }
+    createdAt = user?.created_at ?? null;
+    subscriptionEndAt = user?.subscription_end ?? null;
 
     if (subscriptionEndAt && new Date(subscriptionEndAt).getTime() > Date.now()) {
       return {
@@ -500,17 +476,6 @@ export const generateAlerts = (
   });
   setAlerts([...alertsList.slice(0, 15)]); // Force re-render
   setOverduePigs(overduePigsList);
-};
-
-export const getPigDynamicFarmName = () => {
-  try {
-    const farmDetails = localStorage.getItem("pig_farm_data");
-    const farm = farmDetails ? JSON.parse(farmDetails) : null;
-    return farm && farm.name ? farm.name : "Pig Farm";
-  } catch (error) {
-    console.error("Error parsing pig_farm_data:", error);
-    return "Pig Farm";
-  }
 };
 
 export function penNamesConversion(pens: Pen[], message: string): string {
