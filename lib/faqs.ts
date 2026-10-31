@@ -42,7 +42,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         a: "The Free plan covers the overview, pens and breeding with up to 3 rows, 54 pigs and 1 user. Standard adds health, feeding, earnings, exports and up to 3 team members. Advanced unlocks everything, including reports, analytics and the calendar, with no limits on rows, pigs or team members.",
       },
       {
-        q: "How do I pay?",
+        q: "Does the price depend on how many pigs I have?",
+        a: "Yes. Each paid plan includes a number of pigs in its base price, and every extra live pig adds a small monthly amount, so small farms pay less and large farms pay in line with their herd. Sold, deceased and deleted pigs are not counted. The Pricing page shows your exact price for your current herd before you pay.",
+      },
+      {
+                q: "How do I pay?",
         a: "With M-Pesa. Choose a plan, enter your M-Pesa number and approve the payment prompt on your phone with your PIN. Your plan starts as soon as M-Pesa confirms the payment.",
       },
       {
@@ -69,7 +73,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     items: [
       {
         q: "Can my farm workers use PigMaster?",
-        a: "Yes. The farm owner adds people under Settings → Team & access and gives each one a role, such as Farm manager, Farm worker, Veterinarian, Accountant or Viewer. They receive an email to set their password and then see the same farm.",
+        a: "Yes. The farm owner adds people under Settings → Team & access and gives each one a role: Farm manager, Farm worker or Viewer. They receive an email to set their password and then see the same farm.",
       },
       {
         q: "What can each role do?",
