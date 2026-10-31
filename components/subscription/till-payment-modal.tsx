@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Loader2, Check, AlertCircle, Smartphone } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as utils from "@/lib/utils"
+import { HerdPricingNote, type QuotePricing } from "@/components/subscription/herd-pricing-note"
 
 // Customers may first see a Fuliza offer and then the PIN screen, which can take a few
 // minutes. The server never calls a payment failed before ~3 minutes unless the customer
@@ -56,7 +57,7 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
     }
 
     // Exact amount M-Pesa will charge, shown before the prompt is sent.
-    const [quote, setQuote] = useState<{ amount: number } | null>(null)
+    const [quote, setQuote] = useState<{ amount: number; amountUsd?: number | null; pricing?: QuotePricing } | null>(null)
     useEffect(() => {
         axios.get(`${utils.apiUrl}/payments/quote`, { params: { plan: plan.id, period: isYearly ? "yearly" : "monthly" } })
             .then(res => setQuote(res.data?.data ?? null))
@@ -173,6 +174,8 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                         <p className="text-2xl font-bold text-blue-600">
                             {quote ? `KSh ${quote.amount.toLocaleString("en-KE")}` : "…"}
                         </p>
+                        {quote?.amountUsd ? <p className="text-xs text-gray-500">≈ US${quote.amountUsd.toFixed(2)} · charged in KSh</p> : null}
+                        <HerdPricingNote pricing={quote?.pricing} />
                         <p className="text-xs text-gray-500">
                             {isYearly ? `Covers 12 months, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : `Covers 1 month, until ${endDate.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`}
                         </p>

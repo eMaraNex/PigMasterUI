@@ -13,6 +13,7 @@ import { PRICING_FAQS } from "@/lib/faqs"
 import ProtectedRoute from "@/components/auth/protected-route"
 import { useSubscription } from "@/lib/subscription-context"
 import TillPaymentModal from "@/components/subscription/till-payment-modal";
+import { HerdPricingNote, type QuotePricing } from "@/components/subscription/herd-pricing-note";
 
 const plans = [
     {
@@ -78,11 +79,12 @@ const plans = [
 ]
 
 type Period = "monthly" | "yearly"
-type Quote = { amount: number; currency: string; durationMonths: number }
+type Quote = { amount: number; amountUsd?: number | null; currency: string; durationMonths: number; pricing?: QuotePricing }
 // Matches the server: yearly = 12 months with 16% off (the server is the source of truth for prices).
 const YEARLY_DISCOUNT_PCT = 16
 
 const formatKes = (amount: number) => `KSh ${Math.round(amount).toLocaleString("en-KE")}`
+const formatUsd = (amount?: number | null) => (amount ? `≈ US$${amount.toFixed(2)}` : null)
 
 /** Price block: monthly price, or the yearly total with its monthly equivalent and saving. */
 function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; period: Period; quotes: Record<string, Quote> }) {
@@ -99,9 +101,13 @@ function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; per
     if (!monthly || !yearly) return <div className="mx-auto h-10 w-32 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
     if (period === "monthly") {
         return (
-            <div className="flex items-baseline justify-center gap-1">
-                <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(monthly.amount)}</span>
-                <span className="text-sm text-gray-600 dark:text-gray-300">/ month</span>
+            <div className="space-y-1">
+                <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(monthly.amount)}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">/ month</span>
+                </div>
+                {formatUsd(monthly.amountUsd) && <p className="text-sm text-gray-500 dark:text-gray-400">{formatUsd(monthly.amountUsd)} / month</p>}
+                <HerdPricingNote pricing={monthly.pricing} />
             </div>
         )
     }
@@ -112,6 +118,7 @@ function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; per
                 <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 sm:text-4xl">{formatKes(yearly.amount)}</span>
                 <span className="text-sm text-gray-600 dark:text-gray-300">/ year</span>
             </div>
+            {formatUsd(yearly.amountUsd) && <p className="text-sm text-gray-500 dark:text-gray-400">{formatUsd(yearly.amountUsd)} / year</p>}
             <p className="text-sm text-gray-600 dark:text-gray-300">
                 <span className="mr-1 text-gray-400 line-through">{formatKes(monthly.amount * 12)}</span>
                 ≈ {formatKes(yearly.amount / 12)} / month
@@ -121,6 +128,7 @@ function PlanPrice({ plan, period, quotes }: { plan: (typeof plans)[number]; per
                     You save {formatKes(saving)}
                 </Badge>
             )}
+            <HerdPricingNote pricing={yearly.pricing} />
         </div>
     )
 }
