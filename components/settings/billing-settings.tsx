@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
+import Link from "next/link";
 import { CalendarClock, CheckCircle2, Clock, Crown, Loader2, Receipt, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ type Payment = {
   completed_at: string | null;
   metadata?: { plan_period?: string } | null;
 };
+
 
 const STATUS: Record<Payment["status"], { label: string; icon: typeof CheckCircle2; tone: string }> = {
   success: { label: "Paid", icon: CheckCircle2, tone: "text-emerald-600" },
@@ -157,7 +159,7 @@ export default function BillingSettings() {
               </div>
             </div>
           )}
-          <p className="mt-4 text-xs text-gray-500"><Badge variant="outline" className="mr-1">Tip</Badge>Payments are confirmed by M-Pesa; a pending payment updates automatically within a few minutes.</p>
+          <p className="mt-4 text-xs text-gray-500"><Badge variant="outline" className="mr-1">Tip</Badge>Payments are confirmed by M-Pesa; a pending payment updates automatically within a few minutes. See the <Link href="/billing-policy" className="text-blue-600 underline dark:text-blue-400">billing policy</Link> for pricing and refunds.</p>
         </CardContent>
       </Card>
     </div>

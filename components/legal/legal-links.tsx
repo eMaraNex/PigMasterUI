@@ -8,6 +8,7 @@ export default function LegalLinks({ className = "" }: { className?: string }) {
       <span>© {year} PigMaster</span>
       <Link href="/privacy-policy" className="hover:text-gray-900 hover:underline dark:hover:text-gray-100">Privacy Policy</Link>
       <Link href="/terms" className="hover:text-gray-900 hover:underline dark:hover:text-gray-100">Terms of Service</Link>
+      <Link href="/billing-policy" className="hover:text-gray-900 hover:underline dark:hover:text-gray-100">Billing Policy</Link>
       <Link href="/faq" className="hover:text-gray-900 hover:underline dark:hover:text-gray-100">FAQ</Link>
     </nav>
   );
