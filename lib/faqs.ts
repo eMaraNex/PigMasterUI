@@ -43,7 +43,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         q: "Does the price depend on how many pigs I have?",
-        a: "Yes. Each paid plan includes a number of pigs in its base price, and every extra live pig adds a small monthly amount, so small farms pay less and large farms pay in line with their herd. Sold, deceased and deleted pigs are not counted. The Pricing page shows your exact price for your current herd before you pay.",
+        a: "Yes. Each paid plan includes a number of pigs in its base price, and every extra live pig adds a small monthly amount, up to a monthly maximum. Sold, dead and deleted pigs are not counted. The Pricing page shows your exact price before you pay, and the Billing & Pricing Policy explains the rules.",
+      },
+      {
+        q: "Do I get a refund if I sell pigs or my herd gets smaller?",
+        a: "No, plans are prepaid and are not partly refunded when the herd shrinks. A smaller herd lowers the price of your next payment instead. If you were charged twice, charged the wrong amount or paid without your plan starting, contact support within 30 days with the M-Pesa receipt number and we will fix it or refund you.",
       },
       {
                 q: "How do I pay?",
