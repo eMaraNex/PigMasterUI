@@ -58,10 +58,12 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
 
     // Exact amount M-Pesa will charge, shown before the prompt is sent.
     const [quote, setQuote] = useState<{ amount: number; amountUsd?: number | null; pricing?: QuotePricing } | null>(null)
+    const fetchQuote = async () => {
+        const res = await axios.get(`${utils.apiUrl}/payments/quote`, { params: { plan: plan.id, period: isYearly ? "yearly" : "monthly" } })
+        return res.data?.data ?? null
+    }
     useEffect(() => {
-        axios.get(`${utils.apiUrl}/payments/quote`, { params: { plan: plan.id, period: isYearly ? "yearly" : "monthly" } })
-            .then(res => setQuote(res.data?.data ?? null))
-            .catch(() => setQuote(null))
+        fetchQuote().then(setQuote).catch(() => setQuote(null))
     }, [plan.id, isYearly])
 
     const stopPolling = () => {
@@ -117,10 +119,7 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
 
         try {
             const normalizedPhone = phoneNumber.replace("+", "") // 254...
-            const quoteResponse = await axios.get(`${utils.apiUrl}/payments/quote`, {
-                params: { plan: plan.id, period: plan.period === "yearly" ? "yearly" : "monthly" },
-            })
-            const quote = quoteResponse.data?.data
+            const quote = await fetchQuote()
             if (!quote || typeof quote.amount !== "number" || !quote.currency) {
                 throw new Error("The server returned an invalid payment quote.")
             }
@@ -170,7 +169,9 @@ export default function TillPaymentModal({ plan, onClose, onSuccess }: TillPayme
                 <DialogHeader>
                     <DialogTitle className="text-center">Pay with M-Pesa</DialogTitle>
                     <div className="text-center space-y-1">
-                        <p className="text-lg font-semibold">{plan.name} plan · {isYearly ? "yearly" : "monthly"}</p>
+                        <p className="text-lg font-semibold">
+                            {`${plan.name} plan · ${isYearly ? "yearly" : "monthly"}`}
+                        </p>
                         <p className="text-2xl font-bold text-blue-600">
                             {quote ? `KSh ${quote.amount.toLocaleString("en-KE")}` : "…"}
                         </p>

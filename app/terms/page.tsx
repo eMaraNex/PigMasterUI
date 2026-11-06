@@ -53,6 +53,7 @@ const sections: LegalSection[] = [
         <li>A plan starts as soon as M-Pesa confirms the payment. If a payment fails or is cancelled you are not charged.</li>
         <li>Prices may change; a change never affects a period you have already paid for. If you paid by mistake or a payment went wrong, contact us with your M-Pesa receipt number and we will review it.</li>
         <li>Team members use the plan of the farm they work on.</li>
+        <li>Prices depend on herd size. How prices and refunds work is set out in our <Link className="text-blue-600 underline dark:text-blue-400" href="/billing-policy">Billing &amp; Pricing Policy</Link>, which is part of these terms.</li>
       </ul>
     ),
   },
